@@ -143,7 +143,7 @@ export default function App() {
         return;
     }
 
-    const userId = user.uid;
+   const userId = user ? user.uid : null;
     // Используем имя из Google-аккаунта по умолчанию
     const defaultSettings = { profiles: [{ id: 1, name: user.displayName || 'Пользователь 1', weight: 70, height: 180, age: 30, gender: 'male', activity: 1.375, nutritionMode: 'maintenance' }], activeProfileIds: [1] };
 
@@ -176,20 +176,24 @@ export default function App() {
     }
 
     const crudHandlers = useMemo(() => {
-        if (!user) return {};
-        return {
-            ingredients: {
-                add: async (ing) => await addDoc(collection(db, `users/${user.uid}/ingredients`), ing),
-                update: async (id, ing) => await updateDoc(doc(db, `users/${user.uid}/ingredients/${id}`), ing),
-                delete: async (id) => await deleteDoc(doc(db, `users/${user.uid}/ingredients/${id}`)),
-            },
-            dishes: {
-                add: async (d) => await addDoc(collection(db, `users/${user.uid}/dishes`), d),
-                update: async (id, d) => await updateDoc(doc(db, `users/${user.uid}/dishes/${id}`), d),
-                delete: async (id) => await deleteDoc(doc(db, `users/${user.uid}/dishes/${id}`)),
-            }
+    // Эта проверка не дает коду сломаться, когда пользователь не вошел в систему.
+    if (!user) return {};
+
+    const userId = user.uid; // Здесь мы уже точно знаем, что user существует
+
+    return {
+        ingredients: {
+            add: async (ing) => await addDoc(collection(db, `users/${userId}/ingredients`), ing),
+            update: async (id, ing) => await updateDoc(doc(db, `users/${userId}/ingredients/${id}`), ing),
+            delete: async (id) => await deleteDoc(doc(db, `users/${userId}/ingredients/${id}`)),
+        },
+        dishes: {
+            add: async (d) => await addDoc(collection(db, `users/${userId}/dishes`), d),
+            update: async (id, d) => await updateDoc(doc(db, `users/${userId}/dishes/${id}`), d),
+            delete: async (id) => await deleteDoc(doc(db, `users/${userId}/dishes/${id}`)),
         }
-    }, [user.uid]);
+    }
+}, [user]); // ГЛАВНОЕ ИЗМЕНЕНИЕ: зависимость от всего объекта user, а не от user.uid
 
         // Handlers
     const handleGoogleSignIn = async () => {

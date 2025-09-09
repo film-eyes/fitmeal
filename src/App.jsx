@@ -238,18 +238,24 @@ export default function App() {
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 
     const renderView = () => {
-
-// --- ДИАГНОСТИКА ---
-    console.log("App.jsx: renderView() вызывается.");
-
-
-    if (!user) return <SignInPrompt onSignIn={handleGoogleSignIn} />;
-    if (!settings) return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
-
-    switch (view) {
-        // ... остальная часть без изменений
+    // 1. Если пользователь ЕЩЕ НЕ вошел, показываем кнопку входа
+    if (!user) {
+        return <SignInPrompt onSignIn={handleGoogleSignIn} />;
     }
-    } ;
+
+    // 2. Если пользователь уже вошел, но его данные ЕЩЕ грузятся
+    if (!settings) {
+        return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
+    }
+    
+    // 3. Если все загружено, показываем нужную вкладку
+    switch (view) {
+        case 'ingredients': return <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
+        case 'dishes': return <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;
+        case 'calculator': return <SettingsAndCalculator settings={settings} onUpdateSettings={handleUpdateSettings} />;
+        case 'menu': default: return <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
+    }
+};
 
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">

@@ -25,6 +25,7 @@ try {
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+const isFirebaseInitialized = !!app;
 
 // --- Хелперы и утилиты ---
 const calculateIngredientNutrition = (item, ingredient, portionMultiplier = 1) => {

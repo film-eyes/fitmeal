@@ -104,7 +104,7 @@ const getNutrientClass = (type, value, target, profile) => {
 };
 
 // --- Основной компонент приложения ---
-export default function App() {}
+export default function App() {
 
 // --- ДИАГНОСТИКА ---
     console.log("App.jsx: Компонент App рендерится.");
@@ -279,7 +279,7 @@ return (
             <header className="mb-8 flex justify-between items-center">
                 <div>
                     <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
-                    <p className="text-lg text-white/80 text-shadow">Спортивное меню без заебов</p>
+                    <p className="text-lg text-white/80 text-shadow">Спортивное меню без</p>
                 </div>
                 {user && (
                     <div className="flex items-center gap-4">
@@ -894,4 +894,4 @@ function ShoppingList({ weeklyMenu, dishes, ingredients, settings, onClose, show
             </div>
         </Modal>
     );
-}
+}}

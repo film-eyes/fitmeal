@@ -104,7 +104,7 @@ const getNutrientClass = (type, value, target, profile) => {
 };
 
 // --- Основной компонент приложения ---
-export default function App() {
+export default function App() {}
 
 // --- ДИАГНОСТИКА ---
     console.log("App.jsx: Компонент App рендерится.");
@@ -241,70 +241,74 @@ export default function App() {
     
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 
-    const renderView = () => {
-    // 1. Если Firebase еще не готов, показываем общую загрузку
-    if (!isAuthReady) {
-        return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
-    }
 
-    // 2. Если Firebase готов, но пользователь НЕ вошел, показываем кнопку входа
-    if (!user) {
-        return <SignInPrompt onSignIn={handleGoogleSignIn} />;
-    }
+// --- ФИНАЛЬНЫЙ БЛОК ОТОБРАЖЕНИЯ ---
 
-    // 3. Если пользователь вошел, но его данные ЕЩЕ грузятся
-    if (!settings) {
-        return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
-    }
-    
-    // 4. Если все загружено, показываем нужную вкладку
+// Сначала определяем, какой основной контент показывать
+let mainContent;
+if (!isAuthReady) {
+    // Состояние 1: Firebase еще не проверил, вошел ли пользователь
+    mainContent = <div className="h-screen w-full flex items-center justify-center text-white">Загрузка...</div>;
+} else if (!user) {
+    // Состояние 2: Проверка прошла, пользователь НЕ вошел
+    mainContent = <SignInPrompt onSignIn={handleGoogleSignIn} />;
+} else if (!settings) {
+    // Состояние 3: Пользователь вошел, но его данные еще грузятся
+    mainContent = <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
+} else {
+    // Состояние 4: Все загружено, показываем нужную вкладку
     switch (view) {
-        case 'ingredients': return <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
-        case 'dishes': return <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;
-        case 'calculator': return <SettingsAndCalculator settings={settings} onUpdateSettings={handleUpdateSettings} />;
-        case 'menu': default: return <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
+        case 'ingredients':
+            mainContent = <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
+            break;
+        case 'dishes':
+            mainContent = <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;
+            break;
+        case 'calculator':
+            mainContent = <SettingsAndCalculator settings={settings} onUpdateSettings={handleUpdateSettings} />;
+            break;
+        default: // 'menu'
+            mainContent = <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
+            break;
     }
-};
+}
 
-// --- ДИАГНОСТИКА ---
-    console.log(`App.jsx: Перед рендерингом. isFirebaseInitialized: ${isFirebaseInitialized}, isAuthReady: ${isAuthReady}, User: ${user ? user.uid : 'null'}`);
-
-
-    return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">
-            <div className="max-w-screen-2xl mx-auto">
-                <header className="mb-8 flex justify-between items-center">
-    <div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
-        <p className="text-lg text-white/80 text-shadow">Спортивный рацион без заеба</p>
-    </div>
-    {user && (
-        <div className="flex items-center gap-4">
-            <div className="text-right">
-                <p className="font-semibold">{user.displayName}</p>
-                <p className="text-xs opacity-80">{user.email}</p>
-            </div>
-            <img src={user.photoURL} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-white/50" />
-            <Button onClick={handleSignOut} className="bg-pink-500/80 hover:bg-pink-600/80"><LogOut size={20} /></Button>
-        </div>
-    )}
-                </header>
+return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">
+        <div className="max-w-screen-2xl mx-auto">
+            <header className="mb-8 flex justify-between items-center">
+                <div>
+                    <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
+                    <p className="text-lg text-white/80 text-shadow">Спортивное меню без заебов</p>
+                </div>
                 {user && (
+                    <div className="flex items-center gap-4">
+                        <div className="text-right">
+                            <p className="font-semibold">{user.displayName}</p>
+                            <p className="text-xs opacity-80">{user.email}</p>
+                        </div>
+                        <img src={user.photoURL} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-white/50" />
+                        <Button onClick={handleSignOut} className="bg-pink-500/80 hover:bg-pink-600/80"><LogOut size={20} /></Button>
+                    </div>
+                )}
+            </header>
+
+            {user && (
                 <nav className="flex justify-center flex-wrap items-center gap-2 sm:gap-4 mb-8 p-2 bg-white/20 backdrop-blur-sm rounded-full">
                     <NavButton icon={<Utensils size={20} />} text="Ингредиенты" isActive={view === 'ingredients'} onClick={() => setView('ingredients')} />
                     <NavButton icon={<BookOpen size={20} />} text="Блюда" isActive={view === 'dishes'} onClick={() => setView('dishes')} />
                     <NavButton icon={<Calendar size={20} />} text="Меню" isActive={view === 'menu'} onClick={() => setView('menu')} />
                     <NavButton icon={<Users size={20} />} text="Настройки" isActive={view === 'calculator'} onClick={() => setView('calculator')} />
                 </nav>
-                )}
-                <main>{renderView()}</main>
-                <Toast message={toastMessage} />
-                <footer className="text-center mt-12 text-white/60 text-sm"><p>(Дизайн и разработка: Nikita Vedenyapin x Gemini)</p>{user && <p className="text-xs mt-1 opacity-50">User ID: {user.uid}</p>}</footer>
-            </div>
-        </div>
+            )}
 
-    );
-}
+            <main>{mainContent}</main> 
+
+            <Toast message={toastMessage} />
+            <footer className="text-center mt-12 text-white/60 text-sm"><p>Дизайн и разработка: Gemini</p>{user && <p className="text-xs mt-1 opacity-50">User ID: {user.uid}</p>}</footer>
+        </div>
+    </div>
+);
 
 const SignInPrompt = ({ onSignIn }) => (
     <div className="text-center py-20">

@@ -18,29 +18,21 @@ const firebaseConfig = {
 };
 
 // --- Инициализация Firebase ---
-let app;
+let app, auth, db, googleProvider;
 let isFirebaseInitialized = false;
 
-// --- ДИАГНОСТИКА ---
-console.log("App.jsx: Конфигурация Firebase прочитана:", firebaseConfig.projectId);
-
+// Проверяем, что apiKey не является строкой-заглушкой 'YOUR_API_KEY'
 if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     try {
         app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        googleProvider = new GoogleAuthProvider();
         isFirebaseInitialized = true;
-        // --- ДИАГНОСТИКА ---
-        console.log("App.jsx: Firebase УСПЕШНО инициализирован.");
     } catch (error) {
         console.error("Firebase initialization error:", error);
     }
-} else {
-    // --- ДИАГНОСТИКА ---
-    console.error("App.jsx: ОШИБКА: Ключи Firebase не найдены!");
 }
-
-const auth = getAuth(app);
-const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
 
 // --- Хелперы и утилиты ---
 const calculateIngredientNutrition = (item, ingredient, portionMultiplier = 1) => {

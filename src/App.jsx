@@ -4,7 +4,7 @@ import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, G
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart, Users, Download, FileText, Copy, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 
-// --- ДИАГНОСТИКА почистить ---
+// --- ДИАГНОСТИКА ---
 console.log("App.jsx: Скрипт начал выполняться");
 
 // --- НАСТРОЙКИ FIREBASE ---
@@ -21,7 +21,9 @@ const firebaseConfig = {
 let app, auth, db, googleProvider;
 let isFirebaseInitialized = false;
 
-// Проверяем, что apiKey не является строкой-заглушкой 'YOUR_API_KEY'
+// --- ДИАГНОСТИКА ---
+console.log("App.jsx: Конфигурация Firebase прочитана:", firebaseConfig.projectId);
+
 if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     try {
         app = initializeApp(firebaseConfig);
@@ -29,9 +31,14 @@ if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
         db = getFirestore(app);
         googleProvider = new GoogleAuthProvider();
         isFirebaseInitialized = true;
+        // --- ДИАГНОСТИКА ---
+        console.log("App.jsx: Firebase УСПЕШНО инициализирован.");
     } catch (error) {
         console.error("Firebase initialization error:", error);
     }
+} else {
+    // --- ДИАГНОСТИКА ---
+    console.error("App.jsx: ОШИБКА: Ключи Firebase не найдены!");
 }
 
 // --- Хелперы и утилиты ---
@@ -98,6 +105,10 @@ const getNutrientClass = (type, value, target, profile) => {
 
 // --- Основной компонент приложения ---
 export default function App() {
+
+// --- ДИАГНОСТИКА ---
+    console.log("App.jsx: Компонент App рендерится.");
+
     if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.apiKey) {
         return <FirebaseConfigErrorScreen />;
     }
@@ -125,19 +136,20 @@ export default function App() {
     }, [toastMessage]);
 
     useEffect(() => {
-    if (!isFirebaseInitialized) return;
+    if (!isFirebaseInitialized) {
+        console.error("App.jsx: useEffect Auth - Firebase не инициализирован, выход.");
+        return;
+    }
 
-    // --- ДИАГНОСТИКА ---
     console.log("App.jsx: useEffect Auth - Запускаем проверку аутентификации.");
     setPersistence(auth, browserLocalPersistence)
       .then(() => {
-        // --- ДИАГНОСТИКА ---
-        console.log("App.jsx: useEffect Auth - Хранилище сессии настроено.");
+        console.log("App.jsx: useEffect Auth - Хранилище сессии настроено (persistence).");
         const unsubscribe = onAuthStateChanged(auth, (user) => {
-            // --- ДИАГНОСТИКА ---
             console.log("App.jsx: onAuthStateChanged сработал. Пользователь:", user ? user.uid : "null");
             setUser(user);
             setIsAuthReady(true);
+            console.log("App.jsx: onAuthStateChanged - isAuthReady установлен в true.");
         });
         return () => unsubscribe();
       })
@@ -253,6 +265,10 @@ export default function App() {
         case 'menu': default: return <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
     }
 };
+
+// --- ДИАГНОСТИКА ---
+    console.log(`App.jsx: Перед рендерингом. isFirebaseInitialized: ${isFirebaseInitialized}, isAuthReady: ${isAuthReady}, User: ${user ? user.uid : 'null'}`);
+
 
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">

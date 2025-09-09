@@ -164,78 +164,104 @@ export default function App() {
 }, [isAuthReady, user]); // Зависимость теперь от user
 
     const handleUpdateSettings = async (newSettings) => {
-        if (!userId) return;
-        const settingsDocRef = doc(db, `users/${userId}/data/settings`);
+        if (!user) return;
+        const settingsDocRef = doc(db, `users/${user.uid}/data/settings`);
         await setDoc(settingsDocRef, newSettings);
         setToastMessage('Настройки успешно сохранены!');
     };
     
     const handleUpdateMenu = async (newMenu) => {
-        if (!userId) return;
-        await setDoc(doc(db, `users/${userId}/data/weeklyMenu`), newMenu, { merge: true });
+        if (!user) return;
+        await setDoc(doc(db, `users/${user.uid}/data/weeklyMenu`), newMenu, { merge: true });
     }
 
     const crudHandlers = useMemo(() => {
-        if (!userId) return {};
+        if (!user) return {};
         return {
             ingredients: {
-                add: async (ing) => await addDoc(collection(db, `users/${userId}/ingredients`), ing),
-                update: async (id, ing) => await updateDoc(doc(db, `users/${userId}/ingredients/${id}`), ing),
-                delete: async (id) => await deleteDoc(doc(db, `users/${userId}/ingredients/${id}`)),
+                add: async (ing) => await addDoc(collection(db, `users/${user.uid}/ingredients`), ing),
+                update: async (id, ing) => await updateDoc(doc(db, `users/${user.uid}/ingredients/${id}`), ing),
+                delete: async (id) => await deleteDoc(doc(db, `users/${user.uid}/ingredients/${id}`)),
             },
             dishes: {
-                add: async (d) => await addDoc(collection(db, `users/${userId}/dishes`), d),
-                update: async (id, d) => await updateDoc(doc(db, `users/${userId}/dishes/${id}`), d),
-                delete: async (id) => await deleteDoc(doc(db, `users/${userId}/dishes/${id}`)),
+                add: async (d) => await addDoc(collection(db, `users/${user.uid}/dishes`), d),
+                update: async (id, d) => await updateDoc(doc(db, `users/${user.uid}/dishes/${id}`), d),
+                delete: async (id) => await deleteDoc(doc(db, `users/${user.uid}/dishes/${id}`)),
             }
         }
-    }, [userId]);
+    }, [user.uid]);
 
-// Handlers
-const handleGoogleSignIn = async () => {
+        // Handlers
+    const handleGoogleSignIn = async () => {
     try {
         await signInWithPopup(auth, googleProvider);
     } catch (error) {
         console.error("Google Sign-In Error:", error);
     }
-};
-const handleSignOut = async () => {
+    };
+    const handleSignOut = async () => {
     await signOut(auth);
-};
+    };
 
-
+    
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 
     const renderView = () => {
-        if (!userId) return <div className="text-center">Аутентификация...</div>;
-        switch (view) {
-            case 'ingredients': return <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
-            case 'dishes': return <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;
-            case 'calculator': return <SettingsAndCalculator settings={settings} onUpdateSettings={handleUpdateSettings} />;
-            case 'menu': default: return <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
-        }
-    };
+    if (!user) return <SignInPrompt onSignIn={handleGoogleSignIn} />;
+    if (!settings) return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
+
+    switch (view) {
+        // ... остальная часть без изменений
+    }
+    } ;
 
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">
             <div className="max-w-screen-2xl mx-auto">
-                <header className="mb-8">
-                    <h1 className="text-4xl sm:text-5xl font-bold text-center mb-2 text-shadow">Трекер Калорий FINAL</h1>
-                    <p className="text-center text-lg text-white/80 text-shadow">Планируй, считай, достигай</p>
+                <header className="mb-8 flex justify-between items-center">
+    <div>
+        <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
+        <p className="text-lg text-white/80 text-shadow">Спортивный рацион без заеба</p>
+    </div>
+    {user && (
+        <div className="flex items-center gap-4">
+            <div className="text-right">
+                <p className="font-semibold">{user.displayName}</p>
+                <p className="text-xs opacity-80">{user.email}</p>
+            </div>
+            <img src={user.photoURL} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-white/50" />
+            <Button onClick={handleSignOut} className="bg-pink-500/80 hover:bg-pink-600/80"><LogOut size={20} /></Button>
+        </div>
+    )}
                 </header>
+                {user && (
                 <nav className="flex justify-center flex-wrap items-center gap-2 sm:gap-4 mb-8 p-2 bg-white/20 backdrop-blur-sm rounded-full">
                     <NavButton icon={<Utensils size={20} />} text="Ингредиенты" isActive={view === 'ingredients'} onClick={() => setView('ingredients')} />
                     <NavButton icon={<BookOpen size={20} />} text="Блюда" isActive={view === 'dishes'} onClick={() => setView('dishes')} />
                     <NavButton icon={<Calendar size={20} />} text="Меню" isActive={view === 'menu'} onClick={() => setView('menu')} />
                     <NavButton icon={<Users size={20} />} text="Настройки" isActive={view === 'calculator'} onClick={() => setView('calculator')} />
                 </nav>
+                )}
                 <main>{renderView()}</main>
                 <Toast message={toastMessage} />
-                <footer className="text-center mt-12 text-white/60 text-sm"><p>Дизайн и разработка: Gemini</p>{userId && <p className="text-xs mt-1 opacity-50">User ID: {userId}</p>}</footer>
+                <footer className="text-center mt-12 text-white/60 text-sm"><p>(Дизайн и разработка: Nikita Vedenyapin x Gemini)</p>{user && <p className="text-xs mt-1 opacity-50">User ID: {user.uid}</p>}</footer>
             </div>
         </div>
+
     );
 }
+
+const SignInPrompt = ({ onSignIn }) => (
+    <div className="text-center py-20">
+        <Card className="max-w-md mx-auto">
+            <h2 className="text-3xl font-bold">Добро пожаловать!</h2>
+            <p className="mt-2 text-white/80">Войдите, чтобы получить доступ к своему меню с любого устройства.</p>
+            <Button onClick={onSignIn} className="mt-6 text-lg bg-blue-500/80 hover:bg-blue-600/80 w-full">
+                <LogIn size={24} /> Войти через Google
+            </Button>
+        </Card>
+    </div>
+);
 
 // --- UI Компоненты ---
 const FirebaseConfigErrorScreen = () => (

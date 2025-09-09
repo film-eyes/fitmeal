@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart, Users, Download, FileText, Copy, AlertTriangle, LogIn, LogOut } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart, CalculatorIcon, ChevronDown, Users, Download, FileText, Copy, AlertTriangle } from 'lucide-react';
 
 // --- НАСТРОЙКИ FIREBASE ---
 const firebaseConfig = {
@@ -24,7 +24,6 @@ try {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
 
 // --- Хелперы и утилиты ---
 const calculateIngredientNutrition = (item, ingredient, portionMultiplier = 1) => {
@@ -95,7 +94,7 @@ export default function App() {
     }
 
     const [view, setView] = useState('menu');
-    const [user, setUser] = useState(null);
+    const [userId, setUserId] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [ingredients, setIngredients] = useState([]);
     const [dishes, setDishes] = useState([]);
@@ -117,51 +116,84 @@ export default function App() {
     }, [toastMessage]);
 
     useEffect(() => {
-    if (!isFirebaseInitialized) return;
-
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user); // Просто сохраняем пользователя (или null, если он вышел)
+        console.log("Auth useEffect: Setting persistence...");
+        setPersistence(auth, browserLocalPersistence)
+          .then(() => {
+            console.log("Auth useEffect: Persistence set. Setting up onAuthStateChanged listener.");
+            const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    console.log("onAuthStateChanged: User FOUND. UID:", user.uid);
+                    setUserId(user.uid);
+                } else {
+                    console.log("onAuthStateChanged: No user found. Signing in anonymously...");
+                    try {
+                        await signInAnonymously(auth);
+                        console.log("onAuthStateChanged: Anonymous sign-in successful.");
+                    } catch (error) {
+                        console.error("!!! onAuthStateChanged: ANONYMOUS SIGN-IN FAILED:", error);
+                    }
+                }
+                console.log("onAuthStateChanged: Setting isAuthReady to true.");
+                setIsAuthReady(true);
+            });
+            return () => unsubscribe();
+          })
+          .catch((error) => {
+            console.error("!!! Auth useEffect: SETTING PERSISTENCE FAILED:", error);
             setIsAuthReady(true);
-        });
-        return () => unsubscribe();
-      })
-      .catch((error) => {
-        console.error("Error setting persistence:", error);
-        setIsAuthReady(true);
-      });
-}, []);
+          });
+    }, []);
 
     useEffect(() => {
-    if (!isAuthReady || !user) {
-        // Очищаем данные, если пользователь вышел
-        setIngredients([]);
-        setDishes([]);
-        setWeeklyMenu({});
-        setSettings(null);
-        return;
-    }
-
-    const userId = user.uid;
-    // Используем имя из Google-аккаунта по умолчанию
-    const defaultSettings = { profiles: [{ id: 1, name: user.displayName || 'Пользователь 1', weight: 70, height: 180, age: 30, gender: 'male', activity: 1.375, nutritionMode: 'maintenance' }], activeProfileIds: [1] };
-
-    // ... (все пути остаются такими же, но теперь они работают для Google-пользователя)
-    const settingsDocRef = doc(db, `users/${userId}/data/settings`);
-    const unsubSettings = onSnapshot(settingsDocRef, (doc) => setSettings(doc.exists() ? { ...defaultSettings, ...doc.data() } : defaultSettings));
-
-    const ingredientsQuery = collection(db, `users/${userId}/ingredients`);
-    const unsubIngredients = onSnapshot(ingredientsQuery, snapshot => setIngredients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-
-    const dishesQuery = collection(db, `users/${userId}/dishes`);
-    const unsubDishes = onSnapshot(dishesQuery, snapshot => setDishes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
-
-    const menuDocRef = doc(db, `users/${userId}/data/weeklyMenu`);
-    const unsubMenu = onSnapshot(menuDocRef, (doc) => setWeeklyMenu(doc.exists() ? doc.data() : {}));
-
-    return () => { unsubSettings(); unsubIngredients(); unsubDishes(); unsubMenu(); };
-}, [isAuthReady, user]); // Зависимость теперь от user
+        if (!isAuthReady || !userId) {
+            console.log("Data fetching useEffect: WAITING. isAuthReady:", isAuthReady, "userId:", !!userId);
+            return;
+        }
+        console.log(`Data fetching useEffect: RUNNING for userId: ${userId}`);
+        
+        const defaultSettings = { profiles: [{ id: 1, name: 'Пользователь 1', weight: 70, height: 180, age: 30, gender: 'male', activity: 1.375, nutritionMode: 'maintenance' }], activeProfileIds: [1] };
+        
+        const settingsDocRef = doc(db, `users/${userId}/data/settings`);
+        console.log("Subscribing to settings at path:", `users/${userId}/data/settings`);
+        const unsubSettings = onSnapshot(settingsDocRef, (doc) => {
+            console.log("SUCCESS: Settings snapshot received. Document exists:", doc.exists());
+            setSettings(doc.exists() ? { ...defaultSettings, ...doc.data() } : defaultSettings);
+        }, (error) => {
+            console.error("!!! ERROR getting settings snapshot:", error);
+        });
+        
+        const ingredientsQuery = collection(db, `users/${userId}/ingredients`);
+        console.log("Subscribing to ingredients at path:", `users/${userId}/ingredients`);
+        const unsubIngredients = onSnapshot(ingredientsQuery, (snapshot) => {
+            console.log("SUCCESS: Ingredients snapshot received. Count:", snapshot.size);
+            setIngredients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => {
+            console.error("!!! ERROR getting ingredients snapshot:", error);
+        });
+        
+        const dishesQuery = collection(db, `users/${userId}/dishes`);
+        console.log("Subscribing to dishes at path:", `users/${userId}/dishes`);
+        const unsubDishes = onSnapshot(dishesQuery, (snapshot) => {
+            console.log("SUCCESS: Dishes snapshot received. Count:", snapshot.size);
+            setDishes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => {
+            console.error("!!! ERROR getting dishes snapshot:", error);
+        });
+        
+        const menuDocRef = doc(db, `users/${userId}/data/weeklyMenu`);
+        console.log("Subscribing to menu at path:", `users/${userId}/data/weeklyMenu`);
+        const unsubMenu = onSnapshot(menuDocRef, (doc) => {
+            console.log("SUCCESS: Menu snapshot received. Document exists:", doc.exists());
+            setWeeklyMenu(doc.exists() ? doc.data() : {});
+        }, (error) => {
+            console.error("!!! ERROR getting menu snapshot:", error);
+        });
+        
+        return () => { 
+            console.log("Unsubscribing from all listeners.");
+            unsubSettings(); unsubIngredients(); unsubDishes(); unsubMenu(); 
+        };
+    }, [isAuthReady, userId]);
 
     const handleUpdateSettings = async (newSettings) => {
         if (!userId) return;
@@ -190,19 +222,6 @@ export default function App() {
             }
         }
     }, [userId]);
-
-// Handlers
-const handleGoogleSignIn = async () => {
-    try {
-        await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-        console.error("Google Sign-In Error:", error);
-    }
-};
-const handleSignOut = async () => {
-    await signOut(auth);
-};
-
 
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 

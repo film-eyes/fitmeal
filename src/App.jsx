@@ -4,6 +4,9 @@ import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, G
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart, Users, Download, FileText, Copy, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 
+// --- ДИАГНОСТИКА почистить ---
+console.log("App.jsx: Скрипт начал выполняться");
+
 // --- НАСТРОЙКИ FIREBASE ---
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
@@ -16,16 +19,28 @@ const firebaseConfig = {
 
 // --- Инициализация Firebase ---
 let app;
-try {
-    app = initializeApp(firebaseConfig);
-} catch (error) {
-    console.error("Firebase initialization error:", error);
+let isFirebaseInitialized = false;
+
+// --- ДИАГНОСТИКА ---
+console.log("App.jsx: Конфигурация Firebase прочитана:", firebaseConfig.projectId);
+
+if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
+    try {
+        app = initializeApp(firebaseConfig);
+        isFirebaseInitialized = true;
+        // --- ДИАГНОСТИКА ---
+        console.log("App.jsx: Firebase УСПЕШНО инициализирован.");
+    } catch (error) {
+        console.error("Firebase initialization error:", error);
+    }
+} else {
+    // --- ДИАГНОСТИКА ---
+    console.error("App.jsx: ОШИБКА: Ключи Firebase не найдены!");
 }
 
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
-const isFirebaseInitialized = !!app;
 
 // --- Хелперы и утилиты ---
 const calculateIngredientNutrition = (item, ingredient, portionMultiplier = 1) => {
@@ -120,21 +135,32 @@ export default function App() {
     useEffect(() => {
     if (!isFirebaseInitialized) return;
 
+    // --- ДИАГНОСТИКА ---
+    console.log("App.jsx: useEffect Auth - Запускаем проверку аутентификации.");
     setPersistence(auth, browserLocalPersistence)
       .then(() => {
+        // --- ДИАГНОСТИКА ---
+        console.log("App.jsx: useEffect Auth - Хранилище сессии настроено.");
         const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user); // Просто сохраняем пользователя (или null, если он вышел)
+            // --- ДИАГНОСТИКА ---
+            console.log("App.jsx: onAuthStateChanged сработал. Пользователь:", user ? user.uid : "null");
+            setUser(user);
             setIsAuthReady(true);
         });
         return () => unsubscribe();
       })
       .catch((error) => {
-        console.error("Error setting persistence:", error);
+        console.error("App.jsx: ОШИБКА установки persistence:", error);
         setIsAuthReady(true);
       });
 }, []);
 
+
     useEffect(() => {
+
+  // --- ДИАГНОСТИКА ---
+    console.log(`App.jsx: useEffect Data - Запускается. AuthReady: ${isAuthReady}, User: ${user ? user.uid : 'null'}`);
+
     if (!isAuthReady || !user) {
         // Очищаем данные, если пользователь вышел
         setIngredients([]);
@@ -212,6 +238,11 @@ export default function App() {
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 
     const renderView = () => {
+
+// --- ДИАГНОСТИКА ---
+    console.log("App.jsx: renderView() вызывается.");
+
+
     if (!user) return <SignInPrompt onSignIn={handleGoogleSignIn} />;
     if (!settings) return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
 

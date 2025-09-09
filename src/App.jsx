@@ -238,17 +238,22 @@ export default function App() {
     if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
 
     const renderView = () => {
-    // 1. Если пользователь ЕЩЕ НЕ вошел, показываем кнопку входа
+    // 1. Если Firebase еще не готов, показываем общую загрузку
+    if (!isAuthReady) {
+        return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
+    }
+
+    // 2. Если Firebase готов, но пользователь НЕ вошел, показываем кнопку входа
     if (!user) {
         return <SignInPrompt onSignIn={handleGoogleSignIn} />;
     }
 
-    // 2. Если пользователь уже вошел, но его данные ЕЩЕ грузятся
+    // 3. Если пользователь вошел, но его данные ЕЩЕ грузятся
     if (!settings) {
         return <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
     }
     
-    // 3. Если все загружено, показываем нужную вкладку
+    // 4. Если все загружено, показываем нужную вкладку
     switch (view) {
         case 'ingredients': return <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
         case 'dishes': return <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;

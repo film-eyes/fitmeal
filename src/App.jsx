@@ -1,28 +1,35 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart, Users, Download, FileText, Copy, AlertTriangle, LogIn, LogOut } from 'lucide-react';
+import {
+    getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence,
+    GoogleAuthProvider, signInWithPopup, signOut
+} from 'firebase/auth';
+import {
+    getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setDoc
+} from 'firebase/firestore';
+import {
+    PlusCircle, Edit, Trash2, BookOpen, Utensils, Calendar, XCircle, ShoppingCart,
+    Users, Download, FileText, Copy, AlertTriangle, LogIn, LogOut, ChevronDown
+} from 'lucide-react';
 
 // --- ДИАГНОСТИКА ---
-console.log("App.jsx: Скрипт начал выполняться");
+console.log('App.jsx: Скрипт начал выполняться');
 
 // --- НАСТРОЙКИ FIREBASE ---
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_API_KEY,
-  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_APP_ID
+    apiKey: import.meta.env.VITE_API_KEY,
+    authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_APP_ID,
 };
 
 // --- Инициализация Firebase ---
 let app, auth, db, googleProvider;
 let isFirebaseInitialized = false;
 
-// --- ДИАГНОСТИКА ---
-console.log("App.jsx: Конфигурация Firebase прочитана:", firebaseConfig.projectId);
+console.log('App.jsx: Конфигурация Firebase прочитана:', firebaseConfig.projectId);
 
 if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     try {
@@ -31,41 +38,68 @@ if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
         db = getFirestore(app);
         googleProvider = new GoogleAuthProvider();
         isFirebaseInitialized = true;
-        // --- ДИАГНОСТИКА ---
-        console.log("App.jsx: Firebase УСПЕШНО инициализирован.");
+        console.log('App.jsx: Firebase УСПЕШНО инициализирован.');
     } catch (error) {
-        console.error("Firebase initialization error:", error);
+        console.error('Firebase initialization error:', error);
     }
 } else {
-    // --- ДИАГНОСТИКА ---
-    console.error("App.jsx: ОШИБКА: Ключи Firebase не найдены!");
+    console.error('App.jsx: ОШИБКА: Ключи Firebase не найдены!');
 }
 
 // --- Хелперы и утилиты ---
 const calculateIngredientNutrition = (item, ingredient, portionMultiplier = 1) => {
     if (!item || !ingredient) return { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, weight: 0 };
     const quantity = item.quantity * portionMultiplier;
+
     let weightInGrams = 0;
-    if (item.unit === 'grams') { weightInGrams = quantity; } else { weightInGrams = quantity * (ingredient.gramsPerPiece || 0); }
+    if (item.unit === 'grams') {
+        weightInGrams = quantity;
+    } else {
+        weightInGrams = quantity * (ingredient.gramsPerPiece || 0);
+    }
+
     let price = 0;
-    if (ingredient.unit === 'grams') { price = (ingredient.price / 1000) * weightInGrams; } else { if (ingredient.gramsPerPiece > 0) { const piecesUsed = weightInGrams / ingredient.gramsPerPiece; price = ingredient.price * piecesUsed; } }
-    const nutritionMultiplier = weightInGrams / 100;
-    return { kcal: (ingredient.kcal || 0) * nutritionMultiplier, protein: (ingredient.protein || 0) * nutritionMultiplier, fat: (ingredient.fat || 0) * nutritionMultiplier, carbs: (ingredient.carbs || 0) * nutritionMultiplier, price: price || 0, weight: weightInGrams };
+    if (ingredient.unit === 'grams') {
+        price = (ingredient.price / 1000) * weightInGrams;
+    } else if (ingredient.gramsPerPiece > 0) {
+        const piecesUsed = weightInGrams / ingredient.gramsPerPiece;
+        price = ingredient.price * piecesUsed;
+    }
+
+    const m = weightInGrams / 100;
+    return {
+        kcal: (ingredient.kcal || 0) * m,
+        protein: (ingredient.protein || 0) * m,
+        fat: (ingredient.fat || 0) * m,
+        carbs: (ingredient.carbs || 0) * m,
+        price: price || 0,
+        weight: weightInGrams,
+    };
 };
+
 const calculateTotalsForDish = (dish, ingredients, portionMultiplier = 1) => {
     if (!dish || !dish.ingredients) return { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 };
     return dish.ingredients.reduce((totals, item) => {
         const ing = ingredients.find(i => i.id === item.ingredientId);
-        const nutrition = calculateIngredientNutrition(item, ing, portionMultiplier);
-        totals.kcal += nutrition.kcal; totals.protein += nutrition.protein; totals.fat += nutrition.fat; totals.carbs += nutrition.carbs; totals.price += nutrition.price; totals.totalWeight += nutrition.weight;
+        const n = calculateIngredientNutrition(item, ing, portionMultiplier);
+        totals.kcal += n.kcal;
+        totals.protein += n.protein;
+        totals.fat += n.fat;
+        totals.carbs += n.carbs;
+        totals.price += n.price;
+        totals.totalWeight += n.weight;
         return totals;
     }, { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 });
 };
+
 const calculateBMR = (profile) => {
     const w = parseFloat(profile.weight), h = parseFloat(profile.height), a = parseFloat(profile.age);
     if (!w || !h || !a) return 0;
-    return profile.gender === 'male' ? (10 * w + 6.25 * h - 5 * a + 5) : (10 * w + 6.25 * h - 5 * a - 161);
+    return profile.gender === 'male'
+        ? (10 * w + 6.25 * h - 5 * a + 5)
+        : (10 * w + 6.25 * h - 5 * a - 161);
 };
+
 const getTargetNutrition = (profile) => {
     if (!profile) return { kcal: 0, protein: 0, fat: 0, carbs: 0 };
     const bmr = calculateBMR(profile);
@@ -74,12 +108,18 @@ const getTargetNutrition = (profile) => {
     let kcal = tdee; let proteinFactor = 2, fatFactor = 0.8;
     if (mode === 'cutting') { kcal *= 0.8; proteinFactor = 2; fatFactor = 0.8; }
     if (mode === 'bulking') { kcal *= 1.2; proteinFactor = 2.5; fatFactor = 0.7; }
-    const protein = profile.weight * proteinFactor; const fat = profile.weight * fatFactor; const carbs = (kcal - (protein * 4) - (fat * 9)) / 4;
+    const protein = profile.weight * proteinFactor;
+    const fat = profile.weight * fatFactor;
+    const carbs = (kcal - (protein * 4) - (fat * 9)) / 4;
     return { kcal, protein, fat, carbs };
 };
+
 const getNutrientClass = (type, value, target, profile) => {
     if (!profile || target === 0) return 'text-white';
-    const deviation = (value - target) / target; const weight = profile.weight; const mode = profile.nutritionMode;
+    const deviation = (value - target) / target;
+    const weight = profile.weight;
+    const mode = profile.nutritionMode;
+
     switch (mode) {
         case 'cutting':
             if (type === 'kcal') return deviation >= -0.15 && deviation <= 0.05 ? 'text-green-300' : 'text-red-400';
@@ -93,23 +133,20 @@ const getNutrientClass = (type, value, target, profile) => {
             if (type === 'fat') return deviation >= -0.10 && deviation <= 0.10 ? 'text-green-300' : 'text-red-400';
             if (type === 'carbs') return deviation >= -0.15 && deviation <= 0.15 ? 'text-green-300' : 'text-red-400';
             break;
-        case 'maintenance': default:
+        default:
             if (type === 'kcal') return deviation >= -0.20 && deviation <= 0.10 ? 'text-green-300' : 'text-red-400';
             if (type === 'protein') return value >= 1.8 * weight ? 'text-green-300' : 'text-red-400';
             if (type === 'fat') return deviation >= -0.10 && deviation <= 0.10 ? 'text-green-300' : 'text-red-400';
             if (type === 'carbs') return deviation >= -0.10 && deviation <= 0.10 ? 'text-green-300' : 'text-red-400';
-            break;
     }
     return 'text-white';
 };
 
 // --- Основной компонент приложения ---
 export default function App() {
+    console.log('App.jsx: Компонент App рендерится.');
 
-// --- ДИАГНОСТИКА ---
-    console.log("App.jsx: Компонент App рендерится.");
-
-    if (firebaseConfig.apiKey === "YOUR_API_KEY" || !firebaseConfig.apiKey) {
+    if (firebaseConfig.apiKey === 'YOUR_API_KEY' || !firebaseConfig.apiKey) {
         return <FirebaseConfigErrorScreen />;
     }
 
@@ -123,205 +160,278 @@ export default function App() {
     const [toastMessage, setToastMessage] = useState('');
 
     useEffect(() => {
-        const loadScript = (src, id) => { if (!document.getElementById(id)) { const s = document.createElement('script'); s.src = src; s.id = id; s.async = true; document.body.appendChild(s); }};
+        const loadScript = (src, id) => {
+            if (!document.getElementById(id)) {
+                const s = document.createElement('script');
+                s.src = src; s.id = id; s.async = true;
+                document.body.appendChild(s);
+            }
+        };
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf-script');
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js', 'jspdf-autotable-script');
     }, []);
-    
+
     useEffect(() => {
-        if (toastMessage) {
-            const timer = setTimeout(() => setToastMessage(''), 3000);
-            return () => clearTimeout(timer);
-        }
+        if (!toastMessage) return;
+        const t = setTimeout(() => setToastMessage(''), 3000);
+        return () => clearTimeout(t);
     }, [toastMessage]);
 
+    // --- Auth
     useEffect(() => {
-    if (!isFirebaseInitialized) {
-        console.error("App.jsx: useEffect Auth - Firebase не инициализирован, выход.");
-        return;
-    }
+        if (!isFirebaseInitialized) {
+            console.error('App.jsx: useEffect Auth - Firebase не инициализирован, выход.');
+            return;
+        }
+        console.log('App.jsx: useEffect Auth - Запускаем проверку аутентификации.');
+        setPersistence(auth, browserLocalPersistence)
+            .then(() => {
+                console.log('App.jsx: persistence установлен.');
+                const unsub = onAuthStateChanged(auth, (u) => {
+                    console.log('onAuthStateChanged:', u ? u.uid : 'null');
+                    setUser(u);
+                    setIsAuthReady(true);
+                });
+                return () => unsub();
+            })
+            .catch((e) => {
+                console.error('ОШИБКА установки persistence:', e);
+                setIsAuthReady(true);
+            });
+    }, []);
 
-    console.log("App.jsx: useEffect Auth - Запускаем проверку аутентификации.");
-    setPersistence(auth, browserLocalPersistence)
-      .then(() => {
-        console.log("App.jsx: useEffect Auth - Хранилище сессии настроено (persistence).");
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            console.log("App.jsx: onAuthStateChanged сработал. Пользователь:", user ? user.uid : "null");
-            setUser(user);
-            setIsAuthReady(true);
-            console.log("App.jsx: onAuthStateChanged - isAuthReady установлен в true.");
-        });
-        return () => unsubscribe();
-      })
-      .catch((error) => {
-        console.error("App.jsx: ОШИБКА установки persistence:", error);
-        setIsAuthReady(true);
-      });
-}, []);
-
-
+    // --- Данные пользователя
     useEffect(() => {
+        console.log(`App.jsx: useEffect Data - AuthReady: ${isAuthReady}, User: ${user ? user.uid : 'null'}`);
 
-  // --- ДИАГНОСТИКА ---
-    console.log(`App.jsx: useEffect Data - Запускается. AuthReady: ${isAuthReady}, User: ${user ? user.uid : 'null'}`);
+        if (!isAuthReady || !user) {
+            setIngredients([]);
+            setDishes([]);
+            setWeeklyMenu({});
+            setSettings(null);
+            return;
+        }
 
-    if (!isAuthReady || !user) {
-        // Очищаем данные, если пользователь вышел
-        setIngredients([]);
-        setDishes([]);
-        setWeeklyMenu({});
-        setSettings(null);
-        return;
-    }
+        const userId = user.uid;
+        const defaultSettings = {
+            profiles: [{
+                id: 1,
+                name: user.displayName || 'Пользователь 1',
+                weight: 70, height: 180, age: 30, gender: 'male', activity: 1.375, nutritionMode: 'maintenance',
+            }],
+            activeProfileIds: [1],
+        };
 
-   const userId = user ? user.uid : null;
-    // Используем имя из Google-аккаунта по умолчанию
-    const defaultSettings = { profiles: [{ id: 1, name: user.displayName || 'Пользователь 1', weight: 70, height: 180, age: 30, gender: 'male', activity: 1.375, nutritionMode: 'maintenance' }], activeProfileIds: [1] };
+        const settingsRef = doc(db, `users/${userId}/data/settings`);
+        const unsubSettings = onSnapshot(settingsRef, (d) =>
+            setSettings(d.exists() ? { ...defaultSettings, ...d.data() } : defaultSettings)
+        );
 
-    // ... (все пути остаются такими же, но теперь они работают для Google-пользователя)
-    const settingsDocRef = doc(db, `users/${userId}/data/settings`);
-    const unsubSettings = onSnapshot(settingsDocRef, (doc) => setSettings(doc.exists() ? { ...defaultSettings, ...doc.data() } : defaultSettings));
+        const unsubIngredients = onSnapshot(collection(db, `users/${userId}/ingredients`),
+            snap => setIngredients(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    const ingredientsQuery = collection(db, `users/${userId}/ingredients`);
-    const unsubIngredients = onSnapshot(ingredientsQuery, snapshot => setIngredients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        const unsubDishes = onSnapshot(collection(db, `users/${userId}/dishes`),
+            snap => setDishes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    const dishesQuery = collection(db, `users/${userId}/dishes`);
-    const unsubDishes = onSnapshot(dishesQuery, snapshot => setDishes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        const menuRef = doc(db, `users/${userId}/data/weeklyMenu`);
+        const unsubMenu = onSnapshot(menuRef, (d) => setWeeklyMenu(d.exists() ? d.data() : {}));
 
-    const menuDocRef = doc(db, `users/${userId}/data/weeklyMenu`);
-    const unsubMenu = onSnapshot(menuDocRef, (doc) => setWeeklyMenu(doc.exists() ? doc.data() : {}));
-
-    return () => { unsubSettings(); unsubIngredients(); unsubDishes(); unsubMenu(); };
-}, [isAuthReady, user]); // Зависимость теперь от user
+        return () => { unsubSettings(); unsubIngredients(); unsubDishes(); unsubMenu(); };
+    }, [isAuthReady, user]);
 
     const handleUpdateSettings = async (newSettings) => {
         if (!user) return;
-        const settingsDocRef = doc(db, `users/${user.uid}/data/settings`);
-        await setDoc(settingsDocRef, newSettings);
+        await setDoc(doc(db, `users/${user.uid}/data/settings`), newSettings);
         setToastMessage('Настройки успешно сохранены!');
     };
-    
+
     const handleUpdateMenu = async (newMenu) => {
         if (!user) return;
         await setDoc(doc(db, `users/${user.uid}/data/weeklyMenu`), newMenu, { merge: true });
-    }
+    };
 
     const crudHandlers = useMemo(() => {
-    // Эта проверка не дает коду сломаться, когда пользователь не вошел в систему.
-    if (!user) return {};
+        if (!user) return {};
+        const userId = user.uid;
+        return {
+            ingredients: {
+                add: (ing) => addDoc(collection(db, `users/${userId}/ingredients`), ing),
+                update: (id, ing) => updateDoc(doc(db, `users/${userId}/ingredients/${id}`), ing),
+                delete: (id) => deleteDoc(doc(db, `users/${userId}/ingredients/${id}`)),
+            },
+            dishes: {
+                add: (d) => addDoc(collection(db, `users/${userId}/dishes`), d),
+                update: (id, d) => updateDoc(doc(db, `users/${userId}/dishes/${id}`), d),
+                delete: (id) => deleteDoc(doc(db, `users/${userId}/dishes/${id}`)),
+            },
+        };
+    }, [user]);
 
-    const userId = user.uid; // Здесь мы уже точно знаем, что user существует
-
-    return {
-        ingredients: {
-            add: async (ing) => await addDoc(collection(db, `users/${userId}/ingredients`), ing),
-            update: async (id, ing) => await updateDoc(doc(db, `users/${userId}/ingredients/${id}`), ing),
-            delete: async (id) => await deleteDoc(doc(db, `users/${userId}/ingredients/${id}`)),
-        },
-        dishes: {
-            add: async (d) => await addDoc(collection(db, `users/${userId}/dishes`), d),
-            update: async (id, d) => await updateDoc(doc(db, `users/${userId}/dishes/${id}`), d),
-            delete: async (id) => await deleteDoc(doc(db, `users/${userId}/dishes/${id}`)),
-        }
-    }
-}, [user]); // ГЛАВНОЕ ИЗМЕНЕНИЕ: зависимость от всего объекта user, а не от user.uid
-
-        // Handlers
+    // Handlers
     const handleGoogleSignIn = async () => {
-    try {
-        await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-        console.error("Google Sign-In Error:", error);
+        try {
+            await signInWithPopup(auth, googleProvider);
+        } catch (error) {
+            console.error('Google Sign-In Error:', error);
+        }
+    };
+    const handleSignOut = async () => { await signOut(auth); };
+
+    // --- Ранние проверки рендера
+    if (!isAuthReady) {
+        return (
+            <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">
+                Загрузка...
+            </div>
+        );
     }
-    };
-    const handleSignOut = async () => {
-    await signOut(auth);
-    };
+    if (!user) {
+        return <SignInPrompt onSignIn={handleGoogleSignIn} />;
+    }
+    if (!settings) {
+        return (
+            <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">
+                Загрузка данных пользователя...
+            </div>
+        );
+    }
 
-    
-    if (!isAuthReady || !settings) return <div className="h-screen w-full flex items-center justify-center text-white bg-gradient-to-tr from-pink-500 to-blue-500">Загрузка...</div>;
-
-
-// --- ФИНАЛЬНЫЙ БЛОК ОТОБРАЖЕНИЯ ---
-
-// Сначала определяем, какой основной контент показывать
-let mainContent;
-if (!isAuthReady) {
-    // Состояние 1: Firebase еще не проверил, вошел ли пользователь
-    mainContent = <div className="h-screen w-full flex items-center justify-center text-white">Загрузка...</div>;
-} else if (!user) {
-    // Состояние 2: Проверка прошла, пользователь НЕ вошел
-    mainContent = <SignInPrompt onSignIn={handleGoogleSignIn} />;
-} else if (!settings) {
-    // Состояние 3: Пользователь вошел, но его данные еще грузятся
-    mainContent = <div className="h-screen w-full flex items-center justify-center text-white">Загрузка данных пользователя...</div>;
-} else {
-    // Состояние 4: Все загружено, показываем нужную вкладку
+    // --- Основной контент
+    let mainContent;
     switch (view) {
         case 'ingredients':
-            mainContent = <IngredientsManager ingredients={ingredients} onAdd={crudHandlers.ingredients.add} onUpdate={crudHandlers.ingredients.update} onDelete={crudHandlers.ingredients.delete} />;
+            mainContent = (
+                <IngredientsManager
+                    ingredients={ingredients}
+                    onAdd={crudHandlers.ingredients.add}
+                    onUpdate={crudHandlers.ingredients.update}
+                    onDelete={crudHandlers.ingredients.delete}
+                />
+            );
             break;
         case 'dishes':
-            mainContent = <DishesManager dishes={dishes} ingredients={ingredients} onAdd={crudHandlers.dishes.add} onUpdate={crudHandlers.dishes.update} onDelete={crudHandlers.dishes.delete} />;
+            mainContent = (
+                <DishesManager
+                    dishes={dishes}
+                    ingredients={ingredients}
+                    onAdd={crudHandlers.dishes.add}
+                    onUpdate={crudHandlers.dishes.update}
+                    onDelete={crudHandlers.dishes.delete}
+                />
+            );
             break;
         case 'calculator':
-            mainContent = <SettingsAndCalculator settings={settings} onUpdateSettings={handleUpdateSettings} />;
+            mainContent = (
+                <SettingsAndCalculator
+                    settings={settings}
+                    onUpdateSettings={handleUpdateSettings}
+                />
+            );
             break;
-        default: // 'menu'
-            mainContent = <MenuPlanner dishes={dishes} ingredients={ingredients} weeklyMenu={weeklyMenu} onUpdateMenu={handleUpdateMenu} settings={settings} onUpdateSettings={handleUpdateSettings} showToast={setToastMessage} />;
-            break;
+        default:
+            mainContent = (
+                <MenuPlanner
+                    dishes={dishes}
+                    ingredients={ingredients}
+                    weeklyMenu={weeklyMenu}
+                    onUpdateMenu={handleUpdateMenu}
+                    settings={settings}
+                    onUpdateSettings={handleUpdateSettings}
+                    showToast={setToastMessage}
+                />
+            );
     }
-}
 
-return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">
-        <div className="max-w-screen-2xl mx-auto">
-            <header className="mb-8 flex justify-between items-center">
-                <div>
-                    <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
-                    <p className="text-lg text-white/80 text-shadow">Спортивное меню без</p>
-                </div>
-                {user && (
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="font-semibold">{user.displayName}</p>
-                            <p className="text-xs opacity-80">{user.email}</p>
-                        </div>
-                        <img src={user.photoURL} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-white/50" />
-                        <Button onClick={handleSignOut} className="bg-pink-500/80 hover:bg-pink-600/80"><LogOut size={20} /></Button>
+    return (
+        <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8">
+            <div className="max-w-screen-2xl mx-auto">
+                <header className="mb-8 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-4xl sm:text-5xl font-bold text-shadow">FitMeal</h1>
+                        <p className="text-lg text-white/80 text-shadow">Спортивное меню без заеба</p>
                     </div>
+                    {user && (
+                        <div className="flex items-center gap-4">
+                            <div className="text-right">
+                                <p className="font-semibold">{user.displayName}</p>
+                                <p className="text-xs opacity-80">{user.email}</p>
+                            </div>
+                            <img src={user.photoURL} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-white/50" />
+                            <Button onClick={handleSignOut} className="bg-pink-500/80 hover:bg-pink-600/80">
+                                <LogOut size={20} />
+                            </Button>
+                        </div>
+                    )}
+                </header>
+
+                {user && (
+                    <nav className="flex justify-center flex-wrap items-center gap-2 sm:gap-4 mb-8 p-2 bg-white/20 backdrop-blur-sm rounded-full">
+                        <NavButton icon={<Utensils size={20} />} text="Ингредиенты" isActive={view === 'ingredients'} onClick={() => setView('ingredients')} />
+                        <NavButton icon={<BookOpen size={20} />} text="Блюда" isActive={view === 'dishes'} onClick={() => setView('dishes')} />
+                        <NavButton icon={<Calendar size={20} />} text="Меню" isActive={view === 'menu'} onClick={() => setView('menu')} />
+                        <NavButton icon={<Users size={20} />} text="Настройки" isActive={view === 'calculator'} onClick={() => setView('calculator')} />
+                    </nav>
                 )}
-            </header>
 
-            {user && (
-                <nav className="flex justify-center flex-wrap items-center gap-2 sm:gap-4 mb-8 p-2 bg-white/20 backdrop-blur-sm rounded-full">
-                    <NavButton icon={<Utensils size={20} />} text="Ингредиенты" isActive={view === 'ingredients'} onClick={() => setView('ingredients')} />
-                    <NavButton icon={<BookOpen size={20} />} text="Блюда" isActive={view === 'dishes'} onClick={() => setView('dishes')} />
-                    <NavButton icon={<Calendar size={20} />} text="Меню" isActive={view === 'menu'} onClick={() => setView('menu')} />
-                    <NavButton icon={<Users size={20} />} text="Настройки" isActive={view === 'calculator'} onClick={() => setView('calculator')} />
-                </nav>
-            )}
+                <main>{mainContent}</main>
 
-            <main>{mainContent}</main> 
-
-            <Toast message={toastMessage} />
-            <footer className="text-center mt-12 text-white/60 text-sm"><p>Дизайн и разработка: Gemini</p>{user && <p className="text-xs mt-1 opacity-50">User ID: {user.uid}</p>}</footer>
+                <Toast message={toastMessage} />
+                <footer className="text-center mt-12 text-white/60 text-sm">
+                    <p>Дизайн и разработка: Nikita Vedenyapin</p>
+                    {user && <p className="text-xs mt-1 opacity-50">User ID: {user.uid}</p>}
+                </footer>
+            </div>
         </div>
-    </div>
-);
+    );
+} // ⬅️ Закрываем компонент App
 
+// --- UI-компоненты, объявленные ВНЕ App ---
 const SignInPrompt = ({ onSignIn }) => (
-    <div className="text-center py-20">
-        <Card className="max-w-md mx-auto">
-            <h2 className="text-3xl font-bold">Добро пожаловать!</h2>
-            <p className="mt-2 text-white/80">Войдите, чтобы получить доступ к своему меню с любого устройства.</p>
-            <Button onClick={onSignIn} className="mt-6 text-lg bg-blue-500/80 hover:bg-blue-600/80 w-full">
-                <LogIn size={24} /> Войти через Google
-            </Button>
-        </Card>
-    </div>
-);
+  <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] text-white flex items-center justify-center p-4">
+    <div className="max-w-xl w-full">
+      <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl p-8">
+        <div className="text-center mb-6">
+          <h1 className="text-4xl font-extrabold tracking-tight">FitMeal</h1>
+          <p className="text-white/80 mt-2">Спортивное меню без заеба.</p>
+        </div>
 
+        <div className="grid gap-3 sm:grid-cols-3 mb-8">
+          <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+            <Utensils size={18} /> <span className="text-sm">Ингредиенты</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+            <BookOpen size={18} /> <span className="text-sm">Блюда</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+            <Calendar size={18} /> <span className="text-sm">Меню на неделю</span>
+          </div>
+        </div>
+
+        <button
+          onClick={onSignIn}
+          className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 rounded-xl py-3 font-semibold shadow-lg hover:shadow-xl transition active:scale-[.99]"
+        >
+          {/* Google "G" — собственный SVG, чтобы не тянуть лишние пакеты */}
+          <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8A12 12 0 1 1 24 12a11.9 11.9 0 0 1 8.4 3.3l5.7-5.7A19.9 19.9 0 0 0 24 4a20 20 0 1 0 19.6 16.5z"/>
+            <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8A12 12 0 0 1 24 12c3 0 5.7 1.1 7.8 3l5.9-5.9A19.9 19.9 0 0 0 24 4C15.6 4 8.5 8.8 6.3 14.7z"/>
+            <path fill="#4CAF50" d="M24 44c5.1 0 9.8-2 13.2-5.3l-6.1-5A12 12 0 0 1 12.9 29l-6.5 5A20 20 0 0 0 24 44z"/>
+            <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1 2.8-2.9 5.2-5.3 6.8l6.1 5C39.4 36.8 44 31 44 24c0-1.2-.1-2.5-.4-3.5z"/>
+          </svg>
+          Войти через Google
+        </button>
+
+        <p className="text-xs text-white/70 text-center mt-4">
+          Нажимая «Войти», ты принимаешь условия использования и политику конфиденциальности.
+        </p>
+      </div>
+
+      <p className="text-center text-white/60 text-xs mt-6">
+        Если всплывающие окна заблокированы, разреши pop-ups для сайта или обнови страницу.
+      </p>
+    </div>
+  </div>
+);
 // --- UI Компоненты ---
 const FirebaseConfigErrorScreen = () => (
     <div className="min-h-screen w-full bg-gradient-to-br from-[#FF00D9] to-[#0099FF] font-sans text-white p-4 sm:p-8 flex items-center justify-center">
@@ -408,7 +518,7 @@ function DishesManager({ dishes, ingredients, onAdd, onUpdate, onDelete }) {
         setIsModalOpen(false);
     };
     const handleDelete = (id) => { if (window.confirm('Вы уверены?')) onDelete(id); };
-    
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6"><h2 className="text-3xl font-bold">Блюда</h2><Button onClick={openAddModal}><PlusCircle size={20} /> Добавить</Button></div>
@@ -439,7 +549,7 @@ function DishesManager({ dishes, ingredients, onAdd, onUpdate, onDelete }) {
                                     <p>Цена: {per100g.price.toFixed(2)} ₽</p>
                                 </div>
                             </div>
-                            <details className="text-sm cursor-pointer"><summary className="font-semibold flex items-center gap-1">Ингредиенты <ChevronDown size={16}/></summary>
+                            <details className="text-sm cursor-pointer"><summary className="font-semibold flex items-center gap-1">Ингредиенты <ChevronDown size={16} /></summary>
                                 <ul className="mt-1 pl-2 text-white/90 space-y-2">
                                     {(dish.ingredients || []).map((item, index) => {
                                         const ing = ingredients.find(i => i.id === item.ingredientId);
@@ -451,7 +561,7 @@ function DishesManager({ dishes, ingredients, onAdd, onUpdate, onDelete }) {
                                     })}
                                 </ul>
                             </details>
-                            <details className="text-sm cursor-pointer mt-2"><summary className="font-semibold flex items-center gap-1">Рецепт <ChevronDown size={16}/></summary><p className="mt-1 whitespace-pre-wrap text-white/90 bg-black/20 p-2 rounded">{dish.recipe || 'Нет рецепта'}</p></details>
+                            <details className="text-sm cursor-pointer mt-2"><summary className="font-semibold flex items-center gap-1">Рецепт <ChevronDown size={16} /></summary><p className="mt-1 whitespace-pre-wrap text-white/90 bg-black/20 p-2 rounded">{dish.recipe || 'Нет рецепта'}</p></details>
                             <div className="flex gap-2 mt-4"><Button onClick={() => openEditModal(dish)} className="w-full"><Edit size={16} /> Редакт.</Button><Button onClick={() => handleDelete(dish.id)} className="w-full bg-pink-500/50 hover:bg-pink-600/50"><Trash2 size={16} /> Удалить</Button></div>
                         </Card>
                     )
@@ -464,7 +574,7 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
     const [formState, setFormState] = useState({ name: dish?.name || '', cookingTime: dish?.cookingTime || '', recipe: dish?.recipe || '', ingredients: dish?.ingredients || [] });
     const [newIngredient, setNewIngredient] = useState({ id: '', quantity: '', unit: 'grams' });
     const selectedIngredient = useMemo(() => ingredients.find(i => i.id === newIngredient.id), [newIngredient.id, ingredients]);
-    useEffect(() => { if(selectedIngredient) { setNewIngredient(prev => ({...prev, unit: selectedIngredient.unit})); } }, [selectedIngredient]);
+    useEffect(() => { if (selectedIngredient) { setNewIngredient(prev => ({ ...prev, unit: selectedIngredient.unit })); } }, [selectedIngredient]);
     const handleChange = (e) => setFormState(prev => ({ ...prev, [e.target.name]: e.target.value }));
     const handleIngredientChange = (e) => setNewIngredient(prev => ({ ...prev, [e.target.name]: e.target.value }));
     const addIngredientToDish = () => {
@@ -493,7 +603,7 @@ function SettingsAndCalculator({ settings, onUpdateSettings }) {
             setLocalSettings(prev => ({ ...prev, profiles: [...prev.profiles, newProfile] }));
         }
     };
-    
+
     const removeProfile = (index) => {
         if (localSettings.profiles.length > 1) {
             const profileToRemove = localSettings.profiles[index];
@@ -502,7 +612,7 @@ function SettingsAndCalculator({ settings, onUpdateSettings }) {
     };
 
     const handleSave = () => onUpdateSettings(localSettings);
-    
+
     return (
         <Card>
             <h2 className="text-3xl font-bold mb-6">Настройки пользователей</h2>
@@ -511,7 +621,7 @@ function SettingsAndCalculator({ settings, onUpdateSettings }) {
                     <h3 className="text-2xl font-bold">Профили</h3>
                     {localSettings.profiles.map((profile, index) => (
                         <Card key={profile.id} className="bg-white/5">
-                             <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-center mb-4">
                                 <Input className="!text-xl !font-bold !p-0 !bg-transparent !border-0" value={profile.name} onChange={e => handleProfileChange(index, 'name', e.target.value)} />
                                 {localSettings.profiles.length > 1 && <Button onClick={() => removeProfile(index)} className="!p-2 bg-pink-500/50"><Trash2 size={16} /></Button>}
                             </div>
@@ -532,18 +642,19 @@ function SettingsAndCalculator({ settings, onUpdateSettings }) {
                     {localSettings.profiles.map((profile) => {
                         const target = getTargetNutrition(profile);
                         return (
-                        <Card key={profile.id} className="bg-white/5">
-                            <h4 className="text-xl font-bold mb-3">{profile.name}</h4>
-                            <div className="space-y-2">
-                                <p><strong>Цель ({profile.nutritionMode}):</strong></p>
-                                <p className="text-2xl font-bold text-green-300">{target.kcal.toFixed(0)} <span className="text-base text-white/80">ккал/д</span></p>
-                                <p>Белки: {target.protein.toFixed(0)} г</p>
-                                <p>Жиры: {target.fat.toFixed(0)} г</p>
-                                <p>Углеводы: {target.carbs.toFixed(0)} г</p>
-                            </div>
-                        </Card>
-                    )})}
-                     <Button onClick={handleSave} className="w-full bg-blue-500/80 hover:bg-blue-600/80 text-lg">Сохранить все настройки</Button>
+                            <Card key={profile.id} className="bg-white/5">
+                                <h4 className="text-xl font-bold mb-3">{profile.name}</h4>
+                                <div className="space-y-2">
+                                    <p><strong>Цель ({profile.nutritionMode}):</strong></p>
+                                    <p className="text-2xl font-bold text-green-300">{target.kcal.toFixed(0)} <span className="text-base text-white/80">ккал/д</span></p>
+                                    <p>Белки: {target.protein.toFixed(0)} г</p>
+                                    <p>Жиры: {target.fat.toFixed(0)} г</p>
+                                    <p>Углеводы: {target.carbs.toFixed(0)} г</p>
+                                </div>
+                            </Card>
+                        )
+                    })}
+                    <Button onClick={handleSave} className="w-full bg-blue-500/80 hover:bg-blue-600/80 text-lg">Сохранить все настройки</Button>
                 </div>
             </div>
         </Card>
@@ -592,11 +703,11 @@ function MenuPlanner({ dishes, ingredients, weeklyMenu, onUpdateMenu, settings, 
         setSelectedDay(day);
         setAddDishModalOpen(true);
     };
-    
+
     const handleMenuExport = (format) => {
         const { jsPDF } = window.jspdf;
         const activeProfiles = settings.profiles.filter(p => settings.activeProfileIds.includes(p.id));
-        
+
         if (format === 'pdf' && jsPDF) {
             const doc = new jsPDF();
             doc.addFont('Helvetica', 'normal');
@@ -611,7 +722,7 @@ function MenuPlanner({ dishes, ingredients, weeklyMenu, onUpdateMenu, settings, 
                     const dayMenu = (weeklyMenu[profile.id] || {})[dayKey] || [];
                     dayMenu.forEach(meal => {
                         const dish = dishes.find(d => d.id === meal.dishId);
-                        if(dish) {
+                        if (dish) {
                             const totals = calculateTotalsForDish(dish, ingredients, meal.portion);
                             body.push([profile.name, `${dish.name} (${meal.portion}x)`, totals.kcal.toFixed(0), totals.protein.toFixed(0), totals.fat.toFixed(0), totals.carbs.toFixed(0)]);
                         }
@@ -661,7 +772,7 @@ function MenuPlanner({ dishes, ingredients, weeklyMenu, onUpdateMenu, settings, 
     return (
         <div>
             <MenuControls settings={settings} onActiveProfilesChange={handleActiveProfilesChange} onShoppingListClick={() => setShoppingListOpen(true)} onMenuExport={handleMenuExport} />
-            
+
             {isAddDishModalOpen && <AddDishModal dishes={dishes} onAdd={addDishToDay} onClose={() => setAddDishModalOpen(false)} />}
             {isShoppingListOpen && <ShoppingList weeklyMenu={weeklyMenu} dishes={dishes} ingredients={ingredients} settings={settings} onClose={() => setShoppingListOpen(false)} showToast={showToast} />}
 
@@ -721,7 +832,7 @@ function MenuControls({ settings, onActiveProfilesChange, onShoppingListClick, o
 
 function DayCard({ profile, dayKey, dishes, ingredients, dayMenu, onAddDish, onRemoveDish }) {
     const target = useMemo(() => getTargetNutrition(profile), [profile]);
-    
+
     const dailyTotals = useMemo(() => {
         return dayMenu.reduce((totals, meal) => {
             const dish = dishes.find(d => d.id === meal.dishId);
@@ -758,10 +869,10 @@ function DayCard({ profile, dayKey, dishes, ingredients, dayMenu, onAddDish, onR
                 })}
             </div>
             <div className="text-xs text-center bg-black/20 p-1 rounded mt-auto">
-                <p className="font-semibold">Итог: 
-                    <span className={getNutrientClass('kcal', dailyTotals.kcal, target.kcal, profile)}> {dailyTotals.kcal.toFixed(0)}</span> / 
-                    <span className={getNutrientClass('protein', dailyTotals.protein, target.protein, profile)}> {dailyTotals.protein.toFixed(0)}</span> / 
-                    <span className={getNutrientClass('fat', dailyTotals.fat, target.fat, profile)}> {dailyTotals.fat.toFixed(0)}</span> / 
+                <p className="font-semibold">Итог:
+                    <span className={getNutrientClass('kcal', dailyTotals.kcal, target.kcal, profile)}> {dailyTotals.kcal.toFixed(0)}</span> /
+                    <span className={getNutrientClass('protein', dailyTotals.protein, target.protein, profile)}> {dailyTotals.protein.toFixed(0)}</span> /
+                    <span className={getNutrientClass('fat', dailyTotals.fat, target.fat, profile)}> {dailyTotals.fat.toFixed(0)}</span> /
                     <span className={getNutrientClass('carbs', dailyTotals.carbs, target.carbs, profile)}> {dailyTotals.carbs.toFixed(0)}</span>
                 </p>
                 <p className="font-semibold">Цена: {dailyTotals.price.toFixed(2)} ₽</p>
@@ -774,7 +885,7 @@ function DayCard({ profile, dayKey, dishes, ingredients, dayMenu, onAddDish, onR
 function AddDishModal({ dishes, onAdd, onClose }) {
     const [selectedDish, setSelectedDish] = useState('');
     const [portion, setPortion] = useState(1);
-    
+
     const handleSubmit = () => {
         if (selectedDish) {
             onAdd(selectedDish, portion);
@@ -840,7 +951,7 @@ function ShoppingList({ weeklyMenu, dishes, ingredients, settings, onClose, show
         });
         return { list, totalCost };
     }, [weeklyMenu, dishes, ingredients, settings.activeProfileIds]);
-    
+
     const handleExport = (format) => {
         const { jsPDF } = window.jspdf;
         if (format === 'pdf' && jsPDF) {
@@ -853,8 +964,8 @@ function ShoppingList({ weeklyMenu, dishes, ingredients, settings, onClose, show
                 head: [['Nazvanie', 'Kupit', 'Tsena', 'Vsego nuzhno (g)']],
                 body: shoppingList.list.map(i => [
                     i.name,
-                    `${i.toBuyAmount} ${i.toBuyUnit}`, 
-                    `${i.cost.toFixed(2)} RUB`, 
+                    `${i.toBuyAmount} ${i.toBuyUnit}`,
+                    `${i.cost.toFixed(2)} RUB`,
                     i.totalGrams.toFixed(0)
                 ]),
                 foot: [['Itogo', '', `${shoppingList.totalCost.toFixed(2)} RUB`, '']],
@@ -894,4 +1005,4 @@ function ShoppingList({ weeklyMenu, dishes, ingredients, settings, onClose, show
             </div>
         </Modal>
     );
-}}
+}

@@ -13,6 +13,14 @@ import {
   calculateIngredientNutrition,
 } from "../../lib/nutrition";
 
+// варианты способов готовки
+const COOKING_METHOD_OPTIONS = [
+  { value: "raw", label: "Без обработки (сырой продукт)" },
+  { value: "fried", label: "Жарка (~30% ужарка)" },
+  { value: "boiled", label: "Варка (~30% уварка)" },
+  { value: "baked", label: "Запекание (~30% упекание)" },
+];
+
 // ----- ФОРМА ДОБАВЛЕНИЯ / РЕДАКТИРОВАНИЯ БЛЮДА -----
 
 function DishForm({ dish, ingredients, onSave, onClose }) {
@@ -20,6 +28,7 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
     name: dish?.name || "",
     cookingTime: dish?.cookingTime || "",
     recipe: dish?.recipe || "",
+    // сюда могут приходить ингредиенты с cookingMethod из базы
     ingredients: dish?.ingredients || [],
   });
 
@@ -27,6 +36,7 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
     id: "",
     quantity: "",
     unit: "grams",
+    cookingMethod: "raw",
   });
 
   const selectedIngredient = useMemo(
@@ -60,10 +70,17 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
           ingredientId: newIngredient.id,
           quantity: parseFloat(newIngredient.quantity),
           unit: newIngredient.unit,
+          cookingMethod: newIngredient.cookingMethod || "raw",
         },
       ],
     }));
-    setNewIngredient({ id: "", quantity: "", unit: "grams" });
+
+    setNewIngredient({
+      id: "",
+      quantity: "",
+      unit: "grams",
+      cookingMethod: "raw",
+    });
   };
 
   const removeIngredientFromDish = (index) =>
@@ -109,6 +126,7 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
           className="w-full bg-white/10 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-white/60 h-24"
         />
 
+        {/* список ингредиентов блюда */}
         <div className="space-y-2">
           <h4 className="font-semibold">Ингредиенты блюда:</h4>
           {formState.ingredients.length > 0 ? (
@@ -117,13 +135,25 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
                 const ing = ingredients.find(
                   (i) => i.id === item.ingredientId,
                 );
+                const method = item.cookingMethod || "raw";
+                const methodLabel =
+                  COOKING_METHOD_OPTIONS.find(
+                    (opt) => opt.value === method,
+                  )?.label || null;
+
                 return (
                   <li
                     key={index}
                     className="flex justify-between items-center bg-white/10 p-2 rounded-md"
                   >
                     <span>
-                      {ing?.name || "?"}: {item.quantity} {item.unit}
+                      {ing?.name || "?"}: {item.quantity}{" "}
+                      {item.unit === "grams" ? "г" : "шт"}
+                      {method !== "raw" && methodLabel && (
+                        <span className="ml-1 text-xs text-white/70">
+                          ({methodLabel})
+                        </span>
+                      )}
                     </span>
                     <button
                       type="button"
@@ -141,6 +171,7 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
           )}
         </div>
 
+        {/* блок "Добавить ингредиент" */}
         <div className="space-y-2 p-3 bg-white/10 rounded-lg">
           <h4 className="font-semibold">Добавить ингредиент:</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -166,6 +197,20 @@ function DishForm({ dish, ingredients, onSave, onClose }) {
             />
           </div>
 
+          {/* способ готовки */}
+          <Select
+            name="cookingMethod"
+            value={newIngredient.cookingMethod}
+            onChange={handleIngredientChange}
+          >
+            {COOKING_METHOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </Select>
+
+          {/* единицы измерения для ингредиентов в "pieces" */}
           {selectedIngredient?.unit === "pieces" && (
             <div className="flex gap-4 items-center text-sm">
               <label>Единицы:</label>
@@ -325,7 +370,9 @@ export default function DishesManager({
             <option value="name-desc">По названию (Я–А)</option>
             <option value="kcal-desc">По калориям (убывание)</option>
             <option value="protein-desc">По белку (убывание)</option>
-            <option value="protein100-desc">По белку на 100г (убывание)</option>
+            <option value="protein100-desc">
+              По белку на 100г (убывание)
+            </option>
             <option value="price-asc">По цене (возрастание)</option>
           </Select>
           <Button onClick={openAddModal}>
@@ -394,6 +441,12 @@ export default function DishesManager({
                         ing,
                         1,
                       );
+                      const method = item.cookingMethod || "raw";
+                      const methodLabel =
+                        COOKING_METHOD_OPTIONS.find(
+                          (opt) => opt.value === method,
+                        )?.label || null;
+
                       return (
                         <li
                           key={index}
@@ -402,6 +455,11 @@ export default function DishesManager({
                           <p className="font-bold">
                             {ing?.name || "?"}: {item.quantity}{" "}
                             {item.unit === "grams" ? "г" : "шт"}
+                            {method !== "raw" && methodLabel && (
+                              <span className="ml-1 text-[10px] text-white/70">
+                                ({methodLabel})
+                              </span>
+                            )}
                           </p>
                           <p>
                             КБЖУ: {ingTotals.kcal.toFixed(0)}/

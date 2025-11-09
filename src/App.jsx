@@ -54,26 +54,41 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState('');
 
   // jsPDF скрипты
-  useEffect(() => {
-    const loadScript = (src, id) => {
-      if (!document.getElementById(id)) {
-        const s = document.createElement('script');
-        s.src = src;
-        s.id = id;
-        s.async = true;
-        document.body.appendChild(s);
-      }
-    };
+useEffect(() => {
+  const loadScript = (src, id, onload) => {
+    if (!document.getElementById(id)) {
+      const s = document.createElement("script");
+      s.src = src;
+      s.id = id;
+      s.async = true;
+      if (onload) s.onload = onload;
+      document.body.appendChild(s);
+    } else if (onload) {
+      onload();
+    }
+  };
 
-    loadScript(
-      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-      'jspdf-script',
-    );
-    loadScript(
-      'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
-      'jspdf-autotable-script',
-    );
-  }, []);
+  // 1) грузим jsPDF UMD
+  loadScript(
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+    "jspdf-script",
+    () => {
+      // делаем глобальный jsPDF, чтобы его видел скрипт со шрифтом
+      if (window.jspdf && !window.jsPDF) {
+        window.jsPDF = window.jspdf.jsPDF;
+      }
+
+      // 2) потом грузим autotable
+      loadScript(
+        "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js",
+        "jspdf-autotable-script"
+      );
+
+      // 3) и только после этого — Roboto-Regular-normal.js
+      loadScript("/js/Roboto-Regular-normal.js", "jspdf-roboto-font");
+    }
+  );
+}, []);
 
   // автоскрытие тостов
   useEffect(() => {

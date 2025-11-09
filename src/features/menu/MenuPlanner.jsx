@@ -21,6 +21,34 @@ import {
   getNutrientClass,
 } from "../../lib/nutrition";
 
+// Суммируем КБЖУ, цену и общий вес блюда (1 порция)
+const calculateTotalsForDish = (dish, ingredients, portionMultiplier = 1) => {
+  if (!dish || !dish.ingredients || dish.ingredients.length === 0) {
+    return { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 };
+  }
+
+  return dish.ingredients.reduce(
+    (totals, item) => {
+      const ing = ingredients.find((i) => i.id === item.ingredientId);
+      if (!ing) return totals;
+
+      // calculateIngredientNutrition уже есть в проекте
+      const { kcal, protein, fat, carbs, price, weight } =
+        calculateIngredientNutrition(item, ing, portionMultiplier);
+
+      totals.kcal += kcal;
+      totals.protein += protein;
+      totals.fat += fat;
+      totals.carbs += carbs;
+      totals.price += price;
+      totals.totalWeight += weight;
+
+      return totals;
+    },
+    { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 }
+  );
+};
+
 // ---------- helpers для типов элементов меню ----------
 
 const isIngredientItem = (item) =>
@@ -38,6 +66,14 @@ const ZERO_TOTALS = {
   carbs: 0,
   price: 0,
   totalWeight: 0,
+};
+
+const getDateSuffix = () => {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yyyy = now.getFullYear();
+  return `${dd}_${mm}_${yyyy}`;
 };
 
 // считаем КБЖУ и цену для набора ингредиентов блюда (1 "порция" / 1 базовый сет)
@@ -260,146 +296,312 @@ export default function MenuPlanner({
     setEditingDishInstance(null);
   };
 
-  const handleMenuExport = (format) => {
-    const { jsPDF } = window.jspdf || {};
-    const activeProfiles = settings.profiles.filter((p) =>
-      (settings.activeProfileIds || []).includes(p.id),
-    );
+ const handleMenuExport = (format) => {
+  const dateSuffix = getDateSuffix();
+  const activeProfiles = settings.profiles.filter((p) =>
+    (settings.activeProfileIds || []).includes(p.id)
+  );
 
-    if (format === "pdf" && jsPDF) {
-      const doc = new jsPDF();
-      doc.addFont("Helvetica", "normal");
-      doc.setFont("Helvetica");
-      let y = 15;
-
-      Object.entries(daysOfWeek).forEach(([dayKey, dayName]) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 15;
-        }
-        doc.text(dayName, 14, y);
-        y += 7;
-
-        const body = [];
-
-        activeProfiles.forEach((profile) => {
-          const dayMenu = (weeklyMenu[profile.id] || {})[dayKey] || [];
-
-          dayMenu.forEach((item) => {
-            if (isDishItem(item)) {
-              const dish = dishes.find((d) => d.id === item.dishId);
-              if (!dish) return;
-              const totals = getMealTotalsForDish(dish, ingredients, item);
-              const label = getDishLabel(item);
-
-              body.push([
-                profile.name,
-                `${dish.name} (${label})`,
-                totals.kcal.toFixed(0),
-                totals.protein.toFixed(0),
-                totals.fat.toFixed(0),
-                totals.carbs.toFixed(0),
-              ]);
-            } else if (isIngredientItem(item)) {
-              const ing = ingredients.find(
-                (i) => i.id === item.ingredientId,
-              );
-              if (!ing) return;
-              const totals = calculateIngredientNutrition(
-                { quantity: item.quantity, unit: item.unit },
-                ing,
-                1,
-              );
-              const label = getIngredientLabel(item, ing);
-
-              body.push([
-                profile.name,
-                `${ing.name} (${label})`,
-                totals.kcal.toFixed(0),
-                totals.protein.toFixed(0),
-                totals.fat.toFixed(0),
-                totals.carbs.toFixed(0),
-              ]);
-            }
-          });
-        });
-
-        if (body.length > 0) {
-          doc.autoTable({
-            startY: y,
-            head: [["Пользователь", "Элемент", "Ккал", "Б", "Ж", "У"]],
-            body,
-            theme: "grid",
-            styles: { font: "Helvetica" },
-          });
-          y = doc.lastAutoTable.finalY + 10;
-        } else {
-          y += 5;
-        }
-      });
-
-      doc.save("weekly-menu.pdf");
-    } else if (format === "text") {
-      let text = "";
-
-      Object.entries(daysOfWeek).forEach(([dayKey, dayName]) => {
-        text += `--- ${dayName.toUpperCase()} ---\n`;
-        activeProfiles.forEach((profile) => {
-          text += `\n** ${profile.name} **\n`;
-          const dayMenu = (weeklyMenu[profile.id] || {})[dayKey] || [];
-
-          if (dayMenu.length === 0) {
-            text += "Нет приемов пищи\n";
-          } else {
-            dayMenu.forEach((item) => {
-              if (isDishItem(item)) {
-                const dish = dishes.find((d) => d.id === item.dishId);
-                if (!dish) return;
-                const totals = getMealTotalsForDish(
-                  dish,
-                  ingredients,
-                  item,
-                );
-                const label = getDishLabel(item);
-
-                text += `- ${dish.name} (${label}): К:${totals.kcal.toFixed(
-                  0,
-                )} Б:${totals.protein.toFixed(
-                  0,
-                )} Ж:${totals.fat.toFixed(0)} У:${totals.carbs.toFixed(
-                  0,
-                )}\n`;
-              } else if (isIngredientItem(item)) {
-                const ing = ingredients.find(
-                  (i) => i.id === item.ingredientId,
-                );
-                if (!ing) return;
-                const totals = calculateIngredientNutrition(
-                  { quantity: item.quantity, unit: item.unit },
-                  ing,
-                  1,
-                );
-                const label = getIngredientLabel(item, ing);
-
-                text += `- ${ing.name} (${label}): К:${totals.kcal.toFixed(
-                  0,
-                )} Б:${totals.protein.toFixed(
-                  0,
-                )} Ж:${totals.fat.toFixed(0)} У:${totals.carbs.toFixed(
-                  0,
-                )}\n`;
-              }
-            });
-          }
-        });
-        text += "\n";
-      });
-
-      navigator.clipboard
-        .writeText(text)
-        .then(() => showToast("Меню скопировано!"));
+  if (format === "pdf") {
+    const win = window.open("", "_blank");
+    if (!win) {
+      showToast("Разреши всплывающие окна для этого сайта");
+      return;
     }
-  };
+
+    // кэш базовых порций, чтобы не считать одно и то же много раз
+    const baseTotalsCache = new Map();
+    const getBaseTotals = (dish) => {
+      if (!dish) return null;
+      if (!baseTotalsCache.has(dish.id)) {
+        baseTotalsCache.set(dish.id, calculateTotalsForDish(dish, ingredients, 1));
+      }
+      return baseTotalsCache.get(dish.id);
+    };
+
+    let weekTotalPrice = 0;
+    let daySectionsHtml = "";
+
+    Object.entries(daysOfWeek).forEach(([dayKey, dayName]) => {
+      let rowsHtml = "";
+
+      // суммарные КБЖУ и цена за день
+      const dayTotals = {
+        kcal: 0,
+        protein: 0,
+        fat: 0,
+        carbs: 0,
+        price: 0,
+      };
+
+      activeProfiles.forEach((profile) => {
+        const dayMenu = (weeklyMenu[profile.id] || {})[dayKey] || [];
+
+        dayMenu.forEach((meal) => {
+          const dish = dishes.find((d) => d.id === meal.dishId);
+          if (!dish) return;
+
+          const baseTotals = getBaseTotals(dish);
+          if (!baseTotals || baseTotals.totalWeight === 0) return;
+
+          // ---- расчёт количества порций ----
+          // ожидаем, что:
+          //   - если блюдо задаётся порциями → meal.portion (число)
+          //   - если в граммах → meal.grams (число)
+          let servings = 0;
+          let multiplier = 0;
+
+          if (typeof meal.portion === "number" && !Number.isNaN(meal.portion)) {
+            servings = meal.portion;
+            multiplier = meal.portion;
+          } else if (
+            typeof meal.grams === "number" &&
+            !Number.isNaN(meal.grams) &&
+            baseTotals.totalWeight > 0
+          ) {
+            multiplier = meal.grams / baseTotals.totalWeight; // доля порции
+            servings = multiplier;
+          } else {
+            // на всякий случай: если ничего нет — считаем 1 порцию
+            servings = 1;
+            multiplier = 1;
+          }
+
+          // красиво отображаем количество порций
+          const servingsDisplay =
+            multiplier === 0
+              ? ""
+              : +multiplier.toFixed(2) // убираем лишние нули
+                  .toString()
+                  .replace(/\.00$/, "");
+
+          // ---- пересчёт КБЖУ с учётом multiplier ----
+          const totals = {
+            kcal: baseTotals.kcal * multiplier,
+            protein: baseTotals.protein * multiplier,
+            fat: baseTotals.fat * multiplier,
+            carbs: baseTotals.carbs * multiplier,
+            price: baseTotals.price * multiplier,
+          };
+
+          dayTotals.kcal += totals.kcal;
+          dayTotals.protein += totals.protein;
+          dayTotals.fat += totals.fat;
+          dayTotals.carbs += totals.carbs;
+          dayTotals.price += totals.price;
+
+          rowsHtml += `
+            <tr>
+              <td class="profile">${profile.name}</td>
+              <td class="dish">${dish.name}</td>
+              <td>${servingsDisplay}</td>
+              <td>${totals.kcal.toFixed(0)}</td>
+              <td>${totals.protein.toFixed(0)}</td>
+              <td>${totals.fat.toFixed(0)}</td>
+              <td>${totals.carbs.toFixed(0)}</td>
+              <td>${totals.price.toFixed(2)} ₽</td>
+            </tr>`;
+        });
+      });
+
+      weekTotalPrice += dayTotals.price;
+
+      if (!rowsHtml) {
+        rowsHtml = `
+          <tr>
+            <td colspan="8" class="empty">Нет приёмов пищи</td>
+          </tr>`;
+      }
+
+      daySectionsHtml += `
+        <section class="day">
+          <h2>${dayName}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Профиль</th>
+                <th>Блюдо</th>
+                <th>Порций</th>
+                <th>Ккал</th>
+                <th>Б</th>
+                <th>Ж</th>
+                <th>У</th>
+                <th>Цена</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="day-total">
+            Итого за день: Ккал ${dayTotals.kcal.toFixed(0)} /
+            Б ${dayTotals.protein.toFixed(0)} /
+            Ж ${dayTotals.fat.toFixed(0)} /
+            У ${dayTotals.carbs.toFixed(0)} /
+            Цена ${dayTotals.price.toFixed(2)} ₽
+          </div>
+        </section>`;
+    });
+
+    const title = `weekly_menu_${dateSuffix}`;
+
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   system-ui, sans-serif;
+      background: #f5f5fa;
+      color: #111827;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 4px;
+    }
+    .subtitle {
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    .day {
+      margin-bottom: 24px;
+      padding: 16px 18px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+    .day h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    thead {
+      background: #e5f5ff;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    td.profile {
+      font-weight: 600;
+    }
+    td.dish {
+      font-weight: 500;
+    }
+    td.empty {
+      text-align: center;
+      color: #9ca3af;
+      font-style: italic;
+    }
+    .day-total {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: right;
+      color: #111827;
+    }
+    .week-total {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: right;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Недельное меню</h1>
+    <div class="subtitle">Сгенерировано: ${dateSuffix.replace(/_/g, ".")}</div>
+    ${daySectionsHtml}
+    <div class="week-total">
+      Итого за неделю: ${weekTotalPrice.toFixed(2)} ₽
+    </div>
+  </div>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  } else if (format === "text") {
+    // текстовый экспорт — оставляем близко к тому, что был
+    let text = "";
+    Object.entries(daysOfWeek).forEach(([dayKey, dayName]) => {
+      text += `--- ${dayName.toUpperCase()} ---\n`;
+      activeProfiles.forEach((profile) => {
+        text += `\n** ${profile.name} **\n`;
+        const dayMenu = (weeklyMenu[profile.id] || {})[dayKey] || [];
+
+        if (dayMenu.length === 0) {
+          text += "Нет приёмов пищи\n";
+        } else {
+          dayMenu.forEach((meal) => {
+            const dish = dishes.find((d) => d.id === meal.dishId);
+            if (!dish) return;
+
+            const baseTotals = calculateTotalsForDish(dish, ingredients, 1);
+            if (!baseTotals || baseTotals.totalWeight === 0) return;
+
+            let multiplier = 1;
+
+            if (typeof meal.portion === "number" && !Number.isNaN(meal.portion)) {
+              multiplier = meal.portion;
+            } else if (
+              typeof meal.grams === "number" &&
+              !Number.isNaN(meal.grams) &&
+              baseTotals.totalWeight > 0
+            ) {
+              multiplier = meal.grams / baseTotals.totalWeight;
+            }
+
+            const totals = {
+              kcal: baseTotals.kcal * multiplier,
+              protein: baseTotals.protein * multiplier,
+              fat: baseTotals.fat * multiplier,
+              carbs: baseTotals.carbs * multiplier,
+              price: baseTotals.price * multiplier,
+            };
+
+            text += `- ${dish.name} (${multiplier.toFixed(2)} порции): К:${totals.kcal.toFixed(
+              0
+            )} Б:${totals.protein.toFixed(0)} Ж:${totals.fat.toFixed(
+              0
+            )} У:${totals.carbs.toFixed(0)} Цена:${totals.price.toFixed(2)} ₽\n`;
+          });
+        }
+      });
+      text += "\n";
+    });
+
+    navigator.clipboard
+      .writeText(text)
+      .then(() => showToast("Меню скопировано!"));
+  }
+};
 
   const activeProfiles = settings.profiles.filter((p) =>
     (settings.activeProfileIds || []).includes(p.id),
@@ -1110,14 +1312,167 @@ function EditMenuDishModal({ dish, menuItem, ingredients, onSave, onClose }) {
 //                        Список покупок
 // ----------------------------------------------------------------------
 
-function ShoppingList({
-  weeklyMenu,
-  dishes,
-  ingredients,
-  settings,
-  onClose,
-  showToast,
-}) {
+
+
+const handleExport = (format) => {
+  const dateSuffix = getDateSuffix();
+
+  if (format === "pdf") {
+    // Открываем новую вкладку с HTML-страницей
+    const win = window.open("", "_blank");
+    if (!win) {
+      showToast("Разреши всплывающие окна для этого сайта");
+      return;
+    }
+
+    const title = `shoppinglist_${dateSuffix}`;
+
+    const rowsHtml = shoppingList.list
+      .map(
+        (i) => `
+          <tr>
+            <td class="name">${i.name}</td>
+            <td>${i.toBuyAmount} ${i.toBuyUnit}</td>
+            <td>${i.totalGrams.toFixed(0)} г</td>
+            <td>${i.cost.toFixed(2)} ₽</td>
+          </tr>`
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   system-ui, sans-serif;
+      background: #f5f5fa;
+      color: #111827;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+    }
+    .subtitle {
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    thead {
+      background: #e5f5ff;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    td.name {
+      font-weight: 600;
+    }
+    .footer {
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: right;
+    }
+    .print-hint {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <h1>Список покупок</h1>
+  <div class="subtitle">Сгенерировано: ${dateSuffix.replace(/_/g, ".")}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th>Купить</th>
+        <th>Всего нужно</th>
+        <th>Цена</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+  <div class="footer">
+    Итоговая стоимость: ${shoppingList.totalCost.toFixed(2)} ₽
+  </div>
+  <div class="print-hint">
+    Для сохранения в PDF: Файл → Печать → «Сохранить как PDF»
+  </div>
+  <script>
+    // Мягко предлагаем распечатать / сохранить как PDF
+    setTimeout(function () {
+      try { window.print(); } catch (e) {}
+    }, 400);
+  </script>
+</body>
+</html>`;
+
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  } else if (format === "text") {
+    // TXT-файл с русским текстом
+    let textContent = "Список покупок\n\n";
+
+    textContent += shoppingList.list
+      .map(
+        (i) =>
+          `${i.name}: ${i.toBuyAmount} ${i.toBuyUnit} (нужно ${i.totalGrams.toFixed(
+            0
+          )} г) — ${i.cost.toFixed(2)} ₽`
+      )
+      .join("\n");
+
+    textContent += `\n\nИтого: ${shoppingList.totalCost.toFixed(2)} ₽`;
+
+    const blob = new Blob([textContent], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `shoppinglist_${dateSuffix}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast("TXT-файл списка покупок сохранён");
+  }
+};
+
+// если уже есть getDateSuffix выше в файле — эту функцию НЕ дублируй
+
+
+function ShoppingList({ weeklyMenu, dishes, ingredients, settings, onClose, showToast }) {
   const shoppingList = useMemo(() => {
     const requiredIngredients = {};
     const activeProfileIds = settings.activeProfileIds || [];
@@ -1126,74 +1481,26 @@ function ShoppingList({
       const profileMenu = weeklyMenu[profileId] || {};
       Object.values(profileMenu)
         .flat()
-        .forEach((item) => {
-          // блюда
-          if (isDishItem(item)) {
-            const dish = dishes.find((d) => d.id === item.dishId);
-            if (!dish) return;
+        .forEach((meal) => {
+          const dish = dishes.find((d) => d.id === meal.dishId);
+          if (!dish || !dish.ingredients) return;
 
-            const dishIngredients =
-              getDishIngredientsForMenuItem(dish, item);
-
-            if (!dishIngredients.length) return;
-
-            // базовые totals по 1 "порции" (по кастомному составу, если есть)
-            const baseTotals = calcDishBaseTotals(
-              dishIngredients,
-              ingredients,
-            );
-
-            let factor = item.portion || 1;
-            if (item.grams && baseTotals.totalWeight) {
-              factor = item.grams / baseTotals.totalWeight;
-            }
-
-            dishIngredients.forEach((dishIng) => {
-              const ing = ingredients.find(
-                (i) => i.id === dishIng.ingredientId,
-              );
-              if (!ing) return;
-
-              const { weight } = calculateIngredientNutrition(
-                dishIng,
-                ing,
-                factor,
-                dishIng.cookingMethod,
-              );
-
-              if (!requiredIngredients[ing.id]) {
-                requiredIngredients[ing.id] = {
-                  ...ing,
-                  totalGrams: 0,
-                };
-              }
-              requiredIngredients[ing.id].totalGrams += weight;
-            });
-          }
-
-          // ингредиенты напрямую
-          if (isIngredientItem(item)) {
-            const ing = ingredients.find(
-              (i) => i.id === item.ingredientId,
-            );
+          dish.ingredients.forEach((item) => {
+            const ing = ingredients.find((i) => i.id === item.ingredientId);
             if (!ing) return;
-            const { weight } = calculateIngredientNutrition(
-              { quantity: item.quantity, unit: item.unit },
-              ing,
-              1,
-            );
+
+            const { weight } = calculateIngredientNutrition(item, ing, meal.portion);
+
             if (!requiredIngredients[ing.id]) {
-              requiredIngredients[ing.id] = {
-                ...ing,
-                totalGrams: 0,
-              };
+              requiredIngredients[ing.id] = { ...ing, totalGrams: 0 };
             }
             requiredIngredients[ing.id].totalGrams += weight;
-          }
+          });
         });
     });
 
     let totalCost = 0;
+
     const list = Object.values(requiredIngredients).map((ing) => {
       let toBuyAmount;
       let toBuyUnit;
@@ -1209,9 +1516,7 @@ function ShoppingList({
           toBuyAmount = "?";
           toBuyUnit = "шт";
         } else {
-          toBuyAmount = Math.ceil(
-            ing.totalGrams / ing.gramsPerPiece,
-          );
+          toBuyAmount = Math.ceil(ing.totalGrams / ing.gramsPerPiece);
           toBuyUnit = "шт";
           remainder = toBuyAmount * ing.gramsPerPiece - ing.totalGrams;
           cost = ing.price * toBuyAmount;
@@ -1233,34 +1538,147 @@ function ShoppingList({
   }, [weeklyMenu, dishes, ingredients, settings.activeProfileIds]);
 
   const handleExport = (format) => {
-    const { jsPDF } = window.jspdf || {};
-    if (format === "pdf" && jsPDF) {
-      const doc = new jsPDF();
-      doc.addFont("Helvetica", "normal");
-      doc.setFont("Helvetica");
-      doc.text("Spisok pokupok", 14, 16);
-      doc.autoTable({
-        startY: 20,
-        head: [["Nazvanie", "Kupit", "Tsena", "Vsego nuzhno (g)"]],
-        body: shoppingList.list.map((i) => [
-          i.name,
-          `${i.toBuyAmount} ${i.toBuyUnit}`,
-          `${i.cost.toFixed(2)} RUB`,
-          i.totalGrams.toFixed(0),
-        ]),
-        foot: [["Itogo", "", `${shoppingList.totalCost.toFixed(2)} RUB`, ""]],
-        styles: { font: "Helvetica" },
-      });
-      doc.save("shopping-list.pdf");
+    const dateSuffix = getDateSuffix();
+
+    if (format === "pdf") {
+      // Открываем новую вкладку с готовой HTML-страницей
+      const win = window.open("", "_blank");
+      if (!win) {
+        showToast("Разреши всплывающие окна для этого сайта");
+        return;
+      }
+
+      const title = `shoppinglist_${dateSuffix}`;
+
+      const rowsHtml = shoppingList.list
+        .map(
+          (i) => `
+          <tr>
+            <td class="name">${i.name}</td>
+            <td>${i.toBuyAmount} ${i.toBuyUnit}</td>
+            <td>${i.totalGrams.toFixed(0)} г</td>
+            <td>${i.cost.toFixed(2)} ₽</td>
+          </tr>`
+        )
+        .join("");
+
+      const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>${title}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   system-ui, sans-serif;
+      background: #f5f5fa;
+      color: #111827;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+    }
+    .subtitle {
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    thead {
+      background: #e5f5ff;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    td.name {
+      font-weight: 600;
+    }
+    .footer {
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: right;
+    }
+    .print-hint {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9ca3af;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <h1>Список покупок</h1>
+  <div class="subtitle">Сгенерировано: ${dateSuffix.replace(/_/g, ".")}</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Название</th>
+        <th>Купить</th>
+        <th>Всего нужно</th>
+        <th>Цена</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+  <div class="footer">
+    Итоговая стоимость: ${shoppingList.totalCost.toFixed(2)} ₽
+  </div>
+</body>
+</html>`;
+
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
     } else if (format === "text") {
-      let textContent = shoppingList.list
-        .map((i) => `${i.name}: ${i.toBuyAmount} ${i.toBuyUnit}`)
+      let textContent = "Список покупок\n\n";
+
+      textContent += shoppingList.list
+        .map(
+          (i) =>
+            `${i.name}: ${i.toBuyAmount} ${i.toBuyUnit} (нужно ${i.totalGrams.toFixed(
+              0
+            )} г) — ${i.cost.toFixed(2)} ₽`
+        )
         .join("\n");
+
       textContent += `\n\nИтого: ${shoppingList.totalCost.toFixed(2)} ₽`;
 
-      navigator.clipboard
-        .writeText(textContent)
-        .then(() => showToast("Список скопирован!"));
+      const blob = new Blob([textContent], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shoppinglist_${dateSuffix}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast("TXT-файл списка покупок сохранён");
     }
   };
 
@@ -1299,9 +1717,7 @@ function ShoppingList({
                   </p>
                 )}
               </div>
-              <p className="font-bold text-lg">
-                { ing.cost.toFixed(2) } ₽
-              </p>
+              <p className="font-bold text-lg">{ing.cost.toFixed(2)} ₽</p>
             </div>
           ))
         ) : (

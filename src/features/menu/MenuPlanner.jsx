@@ -16,38 +16,13 @@ import Select from "../../components/ui/Select";
 import Modal from "../../components/ui/Modal";
 
 import {
-  calculateIngredientNutrition,
-  getTargetNutrition,
-  getNutrientClass,
+  calculateTotalsForDish,
+  calculateIngredientNutrition, // если ещё не импортирован
+  getTargetNutrition,           // если используешь
+  getNutrientClass,             // если используешь
 } from "../../lib/nutrition";
 
-// Суммируем КБЖУ, цену и общий вес блюда (1 порция)
-const calculateTotalsForDish = (dish, ingredients, portionMultiplier = 1) => {
-  if (!dish || !dish.ingredients || dish.ingredients.length === 0) {
-    return { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 };
-  }
 
-  return dish.ingredients.reduce(
-    (totals, item) => {
-      const ing = ingredients.find((i) => i.id === item.ingredientId);
-      if (!ing) return totals;
-
-      // calculateIngredientNutrition уже есть в проекте
-      const { kcal, protein, fat, carbs, price, weight } =
-        calculateIngredientNutrition(item, ing, portionMultiplier);
-
-      totals.kcal += kcal;
-      totals.protein += protein;
-      totals.fat += fat;
-      totals.carbs += carbs;
-      totals.price += price;
-      totals.totalWeight += weight;
-
-      return totals;
-    },
-    { kcal: 0, protein: 0, fat: 0, carbs: 0, price: 0, totalWeight: 0 }
-  );
-};
 
 // ---------- helpers для типов элементов меню ----------
 
